@@ -1,0 +1,292 @@
+<!--
+This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+Hosted at: https://jrobb.org/space/merge.html
+Source code: https://github.com/squalor-xyz/space/blob/main/merge.html
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyper-Realistic 8K Simulation of Milky Way and Andromeda Merger</title>
+    <style>
+        html, body {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            right: 0px;
+            bottom: 0px;
+            padding: 0px;
+            margin: 0px;
+            overflow: hidden;
+            display: flex;
+            height: 100%;
+            width: 100%;
+            background-color: #000;
+        }
+
+        canvas {
+            margin: auto auto;
+        }
+    </style>
+</head>
+<body>
+    <script id="2d-fragment-shader" type="x-shader/x-fragment">
+        #ifdef GL_ES
+        precision mediump float;
+        #endif
+
+        #define PI 3.14159265359
+
+        uniform sampler2D u_image;
+        varying vec2 v_texCoord;
+
+        uniform vec2 u_resolution;
+        uniform vec2 u_mouse1;
+        uniform vec2 u_mouse2;
+        uniform float u_mass1;
+        uniform float u_mass2;
+        uniform float u_time;
+
+        vec2 rotate(vec2 mt, vec2 st, float angle){
+            float cos = cos(angle) * (u_time * 0.3);
+            float sin = sin(angle) * (u_time * 0.3);
+            
+            float nx = (cos * (st.x - mt.x)) + (sin * (st.y - mt.y)) + mt.x;
+            float ny = (cos * (st.y - mt.y)) - (sin * (st.x - mt.x)) + mt.y;
+            return vec2(nx, ny);
+        }
+
+        void main() {
+            vec2 st = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y)/u_resolution;
+            vec2 mt1 = vec2(u_mouse1.x, u_resolution.y - u_mouse1.y)/u_resolution;
+            vec2 mt2 = vec2(u_mouse2.x, u_resolution.y - u_mouse2.y)/u_resolution;
+
+            float dx1 = st.x - mt1.x;
+            float dy1 = st.y - mt1.y;
+            float dist1 = sqrt(dx1 * dx1 + dy1 * dy1);
+            float pull1 = u_mass1 / (dist1 * dist1);
+
+            float dx2 = st.x - mt2.x;
+            float dy2 = st.y - mt2.y;
+            float dist2 = sqrt(dx2 * dx2 + dy2 * dy2);
+            float pull2 = u_mass2 / (dist2 * dist2);
+            
+            vec3 color = vec3(0.0);
+            
+            vec2 r1 = rotate(mt1, st, pull1);
+            vec2 r = rotate(mt2, r1, pull2);
+            vec4 imgcolor = texture2D(u_image, r);
+            float total_pull = pull1 + pull2;
+            color = vec3(
+                (imgcolor.x - (total_pull * 0.25)),
+                (imgcolor.y - (total_pull * 0.25)), 
+                (imgcolor.z - (total_pull * 0.25))
+            );
+            
+
+            gl_FragColor = vec4(color,1.);
+        }
+    </script>
+    <script id="2d-vertex-shader" type="x-shader/x-vertex">
+        attribute vec2 a_position;
+        attribute vec2 a_texCoord;
+        
+        varying vec2 v_texCoord;
+        void main() {
+            gl_Position = vec4(a_position, 0, 1);
+            v_texCoord = a_texCoord;
+        }
+    </script>
+    <canvas id="glscreen"></canvas>
+
+    <script>
+        // set up global javascript variables
+
+        var bgUrl = 'https://science.nasa.gov/wp-content/uploads/2023/04/654242main_p1220b3k-jpg.webp';
+
+        var blackholeMass1 = 1500; // Sagittarius A*
+        var blackholeMass2 = 37500; // Andromeda's SMBH
+        var curblackholeMass1 = 0;
+        var curblackholeMass2 = 0;
+
+        var canvas, gl;
+
+        var shaderScript;
+        var shaderSource;
+        var vertexShader;
+        var fragmentShader;
+        var buffer;
+
+        var locationOfTime;
+        var locationOfResolution;
+        var locationOfMouse1;
+        var locationOfMouse2;
+        var locationOfMass1;
+        var locationOfMass2;
+
+        var originY = window.innerHeight,
+            originX = window.innerWidth;
+
+        var mouse1 = {x: 0, y: 0};
+        var mouse2 = {x: 0, y: 0};
+
+        var startTime = new Date().getTime();
+        var currentTime = 0;
+        var previous_t = 0;
+
+        function init(image) {
+            canvas = document.getElementById('glscreen');
+            gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            
+            canvas.width  = 7680;
+            canvas.height = 4320;
+
+            mouse1.x = canvas.width / 2;
+            mouse1.y = canvas.height / 2;
+
+            gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+
+            buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(
+                gl.ARRAY_BUFFER, 
+                new Float32Array([
+                    -1.0, -1.0, 
+                     1.0, -1.0, 
+                    -1.0,  1.0, 
+                    -1.0,  1.0, 
+                     1.0, -1.0, 
+                     1.0,  1.0]), 
+                gl.STATIC_DRAW
+            );
+
+            shaderScript = document.getElementById("2d-vertex-shader");
+            shaderSource = shaderScript.text;
+            vertexShader = gl.createShader(gl.VERTEX_SHADER);
+            gl.shaderSource(vertexShader, shaderSource);
+            gl.compileShader(vertexShader);
+
+            shaderScript   = document.getElementById("2d-fragment-shader");
+            shaderSource   = shaderScript.text;
+            fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(fragmentShader, shaderSource);
+            gl.compileShader(fragmentShader);
+
+            program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            gl.useProgram(program);
+
+            locationOfResolution = gl.getUniformLocation(program, "u_resolution");
+            locationOfMouse1 = gl.getUniformLocation(program, "u_mouse1");
+            locationOfMouse2 = gl.getUniformLocation(program, "u_mouse2");
+            locationOfMass1 = gl.getUniformLocation(program, "u_mass1");
+            locationOfMass2 = gl.getUniformLocation(program, "u_mass2");
+            locationOfTime = gl.getUniformLocation(program, "u_time");
+
+            gl.uniform2f(locationOfResolution, canvas.width, canvas.height);
+            gl.uniform2f(locationOfMouse1, mouse1.x, mouse1.y);
+            gl.uniform2f(locationOfMouse2, mouse2.x, mouse2.y);
+            gl.uniform1f(locationOfMass1, curblackholeMass1*0.00001);
+            gl.uniform1f(locationOfMass2, curblackholeMass2*0.00001);
+            gl.uniform1f(locationOfTime, currentTime);
+
+            var texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
+
+            var texCoordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1.0, -1.0, 
+                 1.0, -1.0, 
+                -1.0,  1.0, 
+                -1.0,  1.0, 
+                 1.0, -1.0, 
+                 1.0,  1.0]), 
+                gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(texCoordLocation);
+            gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+
+            var texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+
+            render();
+        }
+
+        function render() {
+            var now = new Date().getTime();
+            currentTime = (now - startTime) / 1000;
+
+            if(curblackholeMass1 < blackholeMass1 - 50){
+                curblackholeMass1 += (blackholeMass1 - curblackholeMass1) * 0.03;
+            }
+            if(curblackholeMass2 < blackholeMass2 - 50){
+                curblackholeMass2 += (blackholeMass2 - curblackholeMass2) * 0.03;
+            }
+
+            var period = 300;
+            var t = (currentTime % period) / period;
+            if (t < previous_t) {
+                blackholeMass2 = 37500;
+                curblackholeMass2 = curblackholeMass1;
+            }
+            previous_t = t;
+            var radius = (canvas.width / 1.5) * (1 - t);
+            var angle = currentTime * 0.02;
+            mouse2.x = mouse1.x + radius * Math.cos(angle);
+            mouse2.y = mouse1.y + radius * Math.sin(angle);
+
+            var dx = mouse1.x - mouse2.x;
+            var dy = mouse1.y - mouse2.y;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 100) {
+                blackholeMass1 += blackholeMass2;
+                blackholeMass2 = 0;
+                mouse2.x = mouse1.x;
+                mouse2.y = mouse1.y;
+            }
+
+            gl.uniform2f(locationOfMouse1, mouse1.x, mouse1.y);
+            gl.uniform2f(locationOfMouse2, mouse2.x, mouse2.y);
+            gl.uniform1f(locationOfMass1, curblackholeMass1 * 0.00001);
+            gl.uniform1f(locationOfMass2, curblackholeMass2 * 0.00001);
+            gl.uniform1f(locationOfTime, currentTime);
+
+            window.requestAnimationFrame(render, canvas);
+
+            positionLocation = gl.getAttribLocation(program, "a_position");
+            gl.enableVertexAttribArray(positionLocation);
+            gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+        window.addEventListener('load', function(event){
+            var image = new Image();
+            image.crossOrigin = "Anonymous";
+            image.src = bgUrl;
+            image.onload = function() {
+                init(image);
+            }
+        });
+
+        window.addEventListener('resize', function(event){
+            canvas.width  = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            locationOfResolution = gl.getUniformLocation(program, "u_resolution");
+            gl.uniform2f(locationOfResolution, canvas.width, canvas.height);
+        });
+    </script>
+</body>
+</html>
