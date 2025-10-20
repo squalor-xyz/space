@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Galaxy Merger Simulation (8K WebGL)</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: monospace;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        .notice {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 5px 8px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #555;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+        }
+        .notice a {
+            color: #8af;
+            text-decoration: none;
+        }
+        #slider {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 800px;
+            z-index: 10;
+            accent-color: #f80;
+        }
+    </style>
+</head>
+<body>
+    <div class="notice">
+        This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0).<br>
+        Hosted at: <a href="https://jrobb.org/space/merge.html" target="_blank">https://jrobb.org/space/merge.html</a><br>
+        Source: <a href="https://github.com/squalor-xyz/space/blob/main/merge.html" target="_blank">https://github.com/squalor-xyz/space/blob/main/merge.html</a>
+    </div>
+    <canvas id="glcanvas"></canvas>
+    <input type="range" id="slider" min="0" max="1" step="0.001" value="0">
+
+    <script id="sim-vertex-shader" type="x-shader/x-vertex">
+        attribute vec2 a_position;
+        varying vec2 v_texCoord;
+        void main() {
+            v_texCoord = a_position * 0.5 + 0.5;
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }
+    </script>
+
+    <script id="sim-fragment-shader" type="x-shader/x-fragment">
+        precision highp float;
+        varying vec2 v_texCoord;
+        uniform vec2 u_resolution;
+        uniform float u_time;
+        uniform sampler2D u_tex;
+        
+        uniform vec2 u_bhPos1;
+        uniform vec2 u_bhPos2;
+        uniform float u_rs1;
+        uniform float u_rs2;
+        uniform float u_spin1;
+        uniform float u_spin2;
+        uniform float u_strength;
+        uniform float u_prog;
+        uniform float u_flare;
+
+        // Noise functions
+        vec2 hash(vec2 p) {
+            p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+            return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+        }
+
+        float noise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            float a = dot(hash(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0));
+            float b = dot(hash(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
+            float c = dot(hash(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0));
+            float d = dot(hash(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
+            return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+
+        float fbm(vec2 p) {
+            float v = 0.0;
+            float a = 0.5;
+            vec2 shift = vec2(100.0);
+            float lacunarity = 2.02;
+            for (int i = 0; i < 4; ++i) {
+                v += a * noise(p);
+                p = p * lacunarity + shift;
+                a *= 0.5;
+            }
+            return v;
+        }
+
+        // Function to draw a single black hole system (emissive parts + shadow)
+        vec4 draw_bh(vec2 uv, vec2 bh_pos, float rs, float spin, vec2 other_bh_pos, float time, float flare) {
+            if (rs <= 0.0) return vec4(0.0);
+
+            vec2 to_bh = uv - bh_pos;
+            float r = length(to_bh);
+            float phi = atan(to_bh.y, to_bh.x);
+            float r_norm = r / rs;
+
+            vec3 col = vec3(0.0);
+            float alpha = 0.0;
+
+            // Accretion Disk
+            float density = smoothstep(12.0, 11.0, r_norm) * (1.0 - smoothstep(2.5, 3.0, r_norm));
+            density *= exp(-abs(phi) / 0.6);
+            
+            // Tidal distortion
+            if (u_prog <= 0.8) {
+                float dist_other = length(uv - other_bh_pos);
+                density += 0.2 * smoothstep(0.0, 0.2, 0.1 / max(0.001, dist_other)) * (sin(phi + time * 2.0) * 0.5 + 0.5);
+            }
+
+            float swirl = phi - time * 0.15 / sqrt(max(0.1, r_norm)) + spin * time * 0.4;
+            float turb = fbm(vec2(r_norm * 8.0, swirl * 4.0)) * 0.4 + 0.6;
+            float pulsing = 0.7 + 0.3 * sin(time * 1.5) + flare;
+            float doppler_disk = 1.0 + 0.6 * spin * sin(phi + 1.57);
+            
+            vec3 disk_col = vec3(1.0, 0.5, 0.0) * pulsing * turb * doppler_disk;
+            disk_col.g = mix(disk_col.g, 1.0, smoothstep(1.0, 1.3, doppler_disk));
+            disk_col.r = mix(disk_col.r, 0.8, smoothstep(1.0, 0.7, doppler_disk));
+            
+            float disk_alpha = density * 0.6;
+            col = mix(col, disk_col, disk_alpha);
+            alpha = max(alpha, disk_alpha);
+
+            // Photon Ring
+            float dist_ring = abs(r_norm - 1.5);
+            float ring = smoothstep(0.015, 0.0, dist_ring) * (1.0 - smoothstep(0.0, 0.03, dist_ring));
+            float ring_flicker = fbm(vec2(phi * 20.0 + time * 0.05, 0.0)) * 0.3 + 0.7;
+            float doppler_ring = 1.0 + 0.4 * spin * sin(phi + 1.57);
+            vec3 ring_col = vec3(1.0, 0.55, 0.15) * (0.8 + 0.2 * sin(time * 0.5) + flare) * ring_flicker * doppler_ring;
+            
+            float ring_alpha = ring * 0.6;
+            col = mix(col, ring_col, ring_alpha / (1.0 - alpha)); // Additive blend over disk
+            alpha = max(alpha, ring_alpha);
+            
+            // Shadow & Horizon
+            if (r_norm < 1.0) {
+                col = vec3(0.0);
+                alpha = 1.0;
+            } else if (r_norm < 2.0) {
+                float shadow_mix = 0.9 * (1.0 - smoothstep(1.0, 2.0, r_norm));
+                col = mix(col, vec3(0.0), shadow_mix * (1.0 - alpha)); // Blend shadow under emissive parts
+                alpha = max(alpha, shadow_mix);
+            }
+
+            return vec4(col, alpha);
+        }
+
+        void main() {
+            vec2 uv = v_texCoord;
+
+            // Gravitational Lensing (additive)
+            vec2 to_bh1 = uv - u_bhPos1;
+            float r1 = length(to_bh1);
+            vec2 to_bh2 = uv - u_bhPos2;
+            float r2 = length(to_bh2);
+
+            vec2 defl1 = (u_rs1 > 0.0 && r1 > 0.0) ? (to_bh1 / r1) * (u_rs1 * u_rs1 / (r1 * r1)) * u_strength : vec2(0.0);
+            vec2 defl2 = (u_rs2 > 0.0 && r2 > 0.0) ? (to_bh2 / r2) * (u_rs2 * u_rs2 / (r2 * r2)) * u_strength : vec2(0.0);
+            
+            vec3 bg = texture2D(u_tex, fract(uv + defl1 + defl2)).rgb;
+            vec3 col = bg;
+
+            // Draw BH systems
+            vec4 bh1 = draw_bh(uv, u_bhPos1, u_rs1, u_spin1, u_bhPos2, u_time, u_flare);
+            vec4 bh2 = draw_bh(uv, u_bhPos2, u_rs2, u_spin2, u_bhPos1, u_time, 0.0);
+
+            // Blend BHs over background
+            col = bh1.rgb * bh1.a + col * (1.0 - bh1.a);
+            col = bh2.rgb * bh2.a + col * (1.0 - bh2.a);
+
+            gl_FragColor = vec4(col, 1.0);
+        }
+    </script>
+
+    <script id="blit-vertex-shader" type="x-shader/x-vertex">
+        attribute vec2 a_position;
+        varying vec2 v_texCoord;
+        void main() {
+            v_texCoord = a_position * 0.5 + 0.5;
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }
+    </script>
+
+    <script id="blit-fragment-shader" type="x-shader/x-fragment">
+        precision highp float;
+        varying vec2 v_texCoord;
+        uniform sampler2D u_tex;
+        void main() {
+            gl_FragColor = texture2D(u_tex, v_texCoord);
+        }
+    </script>
+
+    <script>
+        let gl, simProgram, blitProgram, quadBuffer, fbo, bgTexture;
+        let u_time, u_resolution, u_tex_sim;
+        let u_bhPos1, u_bhPos2, u_rs1, u_rs2, u_spin1, u_spin2, u_strength, u_prog, u_flare;
+        let u_tex_blit;
+        
+        let startTime = performance.now();
+        const FBO_WIDTH = 7680;
+        const FBO_HEIGHT = 4320;
+        const BG_URL = "https://cdn.esahubble.org/archives/images/large/opo1220b.jpg";
+        
+        let slider, useSlider = false, prog = 0;
+        const PI = 3.1415926535;
+        const LOOP_DURATION = 300.0;
+        const MERGE_TIME = 0.8;
+        const FLARE_DURATION = 5.0;
+        const M1 = 4e6;
+        const M2 = 1e8;
+        const M_RATIO = M2 / M1;
+        const M_TOTAL_RATIO = (M1 + M2) / M1;
+        const BASE_RS = 0.02;
+
+        function initWebGL(canvas) {
+            const context = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (!context) {
+                alert('Unable to initialize WebGL. Your browser may not support it.');
+                return null;
+            }
+            return context;
+        }
+
+        function compileShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        function createProgram(gl, vsSource, fsSource) {
+            const vertexShader = compileShader(gl, vsSource, gl.VERTEX_SHADER);
+            const fragmentShader = compileShader(gl, fsSource, gl.FRAGMENT_SHADER);
+            const program = gl.createProgram();
+            gl.attachShader(program, vertexShader);
+            gl.attachShader(program, fragmentShader);
+            gl.linkProgram(program);
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('Unable to initialize the shader program: ' + gl.getProgramInfoLog(program));
+                return null;
+            }
+            return program;
+        }
+
+        function createFBO(gl, width, height) {
+            const framebuffer = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+
+            const texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            
+            if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+                console.error("Framebuffer object is incomplete: " + gl.checkFramebufferStatus(gl.FRAMEBUFFER));
+            }
+
+            return { framebuffer, texture, width, height };
+        }
+
+        function loadTexture(gl, url, wrap) {
+            const texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+
+            const image = new Image();
+            image.crossOrigin = "anonymous";
+            image.onload = () => {
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            };
+            image.onerror = (e) => {
+                console.error("Failed to load texture: " + url, e);
+            };
+            image.src = url;
+            return texture;
+        }
+
+        function resize() {
+            const canvas = gl.canvas;
+            const dpr = window.devicePixelRatio || 1;
+            const displayWidth = Math.round(canvas.clientWidth * dpr);
+            const displayHeight = Math.round(canvas.clientHeight * dpr);
+
+            if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+                canvas.width = displayWidth;
+                canvas.height = displayHeight;
+            }
+        }
+
+        function setup() {
+            const canvas = document.getElementById('glcanvas');
+            gl = initWebGL(canvas);
+            if (!gl) return;
+
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.disable(gl.DEPTH_TEST);
+
+            const simVS = document.getElementById('sim-vertex-shader').textContent;
+            const simFS = document.getElementById('sim-fragment-shader').textContent;
+            const blitVS = document.getElementById('blit-vertex-shader').textContent;
+            const blitFS = document.getElementById('blit-fragment-shader').textContent;
+
+            simProgram = createProgram(gl, simVS, simFS);
+            blitProgram = createProgram(gl, blitVS, blitFS);
+
+            quadBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+            const simPosAttr = gl.getAttribLocation(simProgram, 'a_position');
+            gl.enableVertexAttribArray(simPosAttr);
+            gl.vertexAttribPointer(simPosAttr, 2, gl.FLOAT, false, 0, 0);
+            
+            const blitPosAttr = gl.getAttribLocation(blitProgram, 'a_position');
+            gl.enableVertexAttribArray(blitPosAttr);
+            gl.vertexAttribPointer(blitPosAttr, 2, gl.FLOAT, false, 0, 0);
+
+            fbo = createFBO(gl, FBO_WIDTH, FBO_HEIGHT);
+            bgTexture = loadTexture(gl, BG_URL, gl.REPEAT);
+
+            u_time = gl.getUniformLocation(simProgram, "u_time");
+            u_resolution = gl.getUniformLocation(simProgram, "u_resolution");
+            u_tex_sim = gl.getUniformLocation(simProgram, "u_tex");
+            u_bhPos1 = gl.getUniformLocation(simProgram, "u_bhPos1");
+            u_bhPos2 = gl.getUniformLocation(simProgram, "u_bhPos2");
+            u_rs1 = gl.getUniformLocation(simProgram, "u_rs1");
+            u_rs2 = gl.getUniformLocation(simProgram, "u_rs2");
+            u_spin1 = gl.getUniformLocation(simProgram, "u_spin1");
+            u_spin2 = gl.getUniformLocation(simProgram, "u_spin2");
+            u_strength = gl.getUniformLocation(simProgram, "u_strength");
+            u_prog = gl.getUniformLocation(simProgram, "u_prog");
+            u_flare = gl.getUniformLocation(simProgram, "u_flare");
+            
+            u_tex_blit = gl.getUniformLocation(blitProgram, "u_tex");
+            
+            slider = document.getElementById("slider");
+            slider.oninput = () => { useSlider = true; prog = parseFloat(slider.value); };
+            slider.onmouseup = slider.ontouchend = () => { 
+                startTime = performance.now() - prog * LOOP_DURATION * 1000.0;
+                useSlider = false; 
+            };
+
+            window.addEventListener('resize', resize);
+            resize();
+            animate();
+        }
+
+        function animate(now) {
+            requestAnimationFrame(animate);
+            
+            let t;
+            if (useSlider) {
+                t = prog * LOOP_DURATION;
+            } else {
+                t = (now - startTime) / 1000.0;
+                prog = (t / LOOP_DURATION) % 1.0;
+                slider.value = prog;
+            }
+
+            const amp = 0.4 * (1.0 - prog);
+            const theta = prog * 10.0 * PI;
+            
+            let pos1 = [0.5 + amp * Math.cos(theta), 0.5 + amp * Math.sin(theta)];
+            let pos2 = [0.5 - amp * Math.cos(theta), 0.5 - amp * Math.sin(theta)];
+            let rs1 = BASE_RS;
+            let rs2 = BASE_RS * Math.sqrt(M_RATIO);
+            let flare = 0.0;
+
+            if (prog > MERGE_TIME) {
+                const mergeProg = (prog - MERGE_TIME) / (1.0 - MERGE_TIME);
+                pos1 = [0.5, 0.5];
+                pos2 = [0.5, 0.5];
+                rs1 = BASE_RS * Math.sqrt(M_TOTAL_RATIO);
+                rs2 = 0.0;
+                
+                const mergeTimePoint = LOOP_DURATION * MERGE_TIME;
+                const timeSinceMerge = t - mergeTimePoint;
+                if (timeSinceMerge >= 0.0 && timeSinceMerge < FLARE_DURATION) {
+                    flare = 2.0 * (1.0 - timeSinceMerge / FLARE_DURATION);
+                }
+            }
+
+            // 1. Render to FBO
+            gl.useProgram(simProgram);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.framebuffer);
+            gl.viewport(0, 0, fbo.width, fbo.height);
+
+            gl.uniform1f(u_time, t);
+            gl.uniform2f(u_resolution, fbo.width, fbo.height);
+            gl.uniform1f(u_prog, prog);
+            gl.uniform2f(u_bhPos1, pos1[0], pos1[1]);
+            gl.uniform2f(u_bhPos2, pos2[0], pos2[1]);
+            gl.uniform1f(u_rs1, rs1);
+            gl.uniform1f(u_rs2, rs2);
+            gl.uniform1f(u_spin1, 0.7);
+            gl.uniform1f(u_spin2, 0.9);
+            gl.uniform1f(u_strength, 0.3);
+            gl.uniform1f(u_flare, flare);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, bgTexture);
+            gl.uniform1i(u_tex_sim, 0);
+
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+            // 2. Blit to Canvas
+            gl.useProgram(blitProgram);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, fbo.texture);
+            gl.uniform1i(u_tex_blit, 0);
+
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+
+        window.onload = setup;
+    </script>
+</body>
+</html>
