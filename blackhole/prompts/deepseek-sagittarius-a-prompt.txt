@@ -1,0 +1,36 @@
+deepseek-sagittarius-a-prompt.txt
+
+Create a hyper-realistic WebGL simulation of Sagittarius A*, the supermassive black hole at the center of our Milky Way galaxy. The simulation should feature:
+
+BLACK HOLE PHYSICS:
+- Single fixed black hole at screen center with realistic parameters:
+  * Schwarzschild radius (rs): ~0.015
+  * Spin parameter: ~0.7  
+  * Lensing strength: ~0.3
+- Accurate gravitational lensing that distorts background stars
+- Dynamic accretion disk with:
+  * Realistic rotation and turbulence using 3-octave FBM noise
+  * Temperature gradient from hot inner regions to cooler outer regions
+  * Time-based glow variation and subtle flickering
+- Event horizon as a perfect black circle
+- Frame dragging effects from black hole spin
+
+VISUAL ELEMENTS:
+- Background: Tileable high-resolution star field (use NASA star map)
+- Color scheme: Golden accretion disk with orange-red inner glow
+- Continuous 300-second animation loop controlled by progress slider
+- Smooth 60 FPS performance using requestAnimationFrame
+- 4K resolution rendering via off-screen framebuffer
+
+TECHNICAL REQUIREMENTS:
+- Pure WebGL1 with self-contained HTML/JavaScript
+- High-precision float calculations
+- Linear texture filtering
+- Proper blending (SRC_ALPHA, ONE_MINUS_SRC_ALPHA)
+- Optimized for mid-range GPUs (limit shader complexity)
+- Cross-origin image loading with graceful error handling
+
+LICENSE NOTICE:
+- Top-left div with exact text: "This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). Hosted at https://jrobb.org/space/sagittarius-a.html. Source: https://github.com/squalor-xyz/space/blob/main/sagittarius-a.html."
+
+Focus on creating a scientifically plausible yet visually stunning representation that captures the awe-inspiring nature of our galaxy's central black hole.

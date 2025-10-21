@@ -1,0 +1,44 @@
+deepseek-solar-system-merge-prompt.txt
+
+Create a serene 4K WebGL visualization of solar system dynamics during galaxy merger, focusing on stellar motions rather than black hole physics. The simulation should feature:
+
+STELLAR POPULATIONS:
+- Two galaxy systems represented by procedural point clouds:
+  * ~50 twinkling white stars per galaxy (100 total)
+  * Hash-based positional offsets (~0.2 range)
+  * Subtle wobble using sin(time + star_index)
+  * Orbital motion around respective galaxy centers
+
+SOLAR SYSTEM HIGHLIGHTS:
+- Yellow point (size ~0.005) representing our solar system:
+  * Orbits Milky Way center at radius ~0.1
+  * Orbital period synchronized with 300s loop
+- Cyan point for Andromeda solar system:
+  * Similar orbital characteristics
+  * Disappears after galaxy merger (progress > 0.8)
+
+GALAXY DYNAMICS:
+- Galaxy centers follow identical spiral merger path as black hole simulation
+- Smooth orbital decay over 300-second loop
+- Clear visual distinction between background stars and solar systems
+- Subtle star trails and twinkling effects for realism
+
+VISUAL AESTHETIC:
+- Background: High-resolution star field (clamped, non-repeating)
+- Color scheme: White stars, yellow/cyan solar system markers
+- Serene, minimalist appearance emphasizing cosmic scale
+- Continuous 300s animation with progress slider
+- Reduced resolution (1080p) for optimal performance
+
+TECHNICAL IMPLEMENTATION:
+- WebGL1 point rendering with custom shaders
+- Hash-based procedural star positions
+- Time-based uniform updates for animation
+- Optimized for smooth performance (50-star iterations)
+- Cross-origin background image loading
+- Self-contained HTML with proper blending
+
+LICENSE NOTICE:
+- Top-left div with exact text: "This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). Hosted at https://jrobb.org/space/solar-system-merger.html. Source: https://github.com/squalor-xyz/space/blob/main/solar-system-merger.html."
+
+Focus on creating a peaceful, educational visualization that illustrates how solar systems move within merging galaxies, providing scale and context for cosmic evolution.

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Milky Way ↔ Andromeda Merger</title>
+<style>
+  body,html{margin:0;height:100%;overflow:hidden;background:#000}
+  #notice{
+    position:absolute;top:0;left:0;padding:.4em .8em;
+    background:rgba(0,0,0,.6);color:#fff;font-size:.9rem;
+    font-family:sans-serif;z-index:10;
+  }
+  #slider{
+    position:absolute;bottom:1rem;left:50%;transform:translateX(-50%);
+    width:40%;z-index:10;
+  }
+</style>
+</head>
+<body>
+<div id="notice">
+  This simulation is licensed under the <a href="https://www.mozilla.org/en-US/MPL/2.0/" target="_blank" style="color:#9cf">Mozilla Public License 2.0 (MPL‑2.0)</a>.<br>
+  Hosted at <a href="https://jrobb.org/space/merge.html" target="_blank" style="color:#9cf">https://jrobb.org/space/merge.html</a>.<br>
+  Source: <a href="https://github.com/squalor-xyz/space/blob/main/merge.html" target="_blank" style="color:#9cf">GitHub</a>.
+</div>
+<input id="slider" type="range" min="0" max="300" step="0.01" value="0">
+<canvas id="glcanvas"></canvas>
+
+<script>
+// ---------- Helper Functions ----------
+function createShader(gl, src, type){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+    console.error('Shader compile error:', gl.getShaderInfoLog(s));
+    return null;
+  }
+  return s;
+}
+function createProgram(gl, vsSrc, fsSrc){
+  const prog = gl.createProgram();
+  gl.attachShader(prog, createShader(gl, vsSrc, gl.VERTEX_SHADER));
+  gl.attachShader(prog, createShader(gl, fsSrc, gl.FRAGMENT_SHADER));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)){
+    console.error('Program link error:', gl.getProgramInfoLog(prog));
+    return null;
+  }
+  return prog;
+}
+
+// ---------- Canvas Setup ----------
+const canvas = document.getElementById('glcanvas');
+canvas.width = 3840 * window.devicePixelRatio;   // 4K off‑screen buffer
+canvas.height = 2160 * window.devicePixelRatio;
+canvas.style.width = '100%';
+canvas.style.height = '100%';
+const gl = canvas.getContext('webgl', {alpha:false});
+if (!gl) alert('WebGL not supported');
+
+// ---------- Vertex Shader ----------
+const vs = `
+attribute vec2 aPos;
+varying vec2 vUV;
+void main(){
+  vUV = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`;
+
+// ---------- Fragment Shader ----------
+const fs = `
+precision highp float;
+varying vec2 vUV;
+uniform sampler2D uStars;
+uniform float uTime;
+uniform float uProg; // 0‑1 over 300 s loop
+
+// ----- Simple 3‑octave FBM -----
+float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7))) * 43758.5453123); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  float a = hash(i), b = hash(i+vec2(1.0,0.0));
+  float c = hash(i+vec2(0.0,1.0)), d = hash(i+vec2(1.0,1.0));
+  vec2 u = f*f*(3.0-2.0*f);
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}
+float fbm(vec2 p){
+  float val = 0.0, amp = 0.5;
+  for(int i=0;i<3;i++){
+    val += amp * noise(p);
+    p *= 2.0;
+    amp *= 0.5;
+  }
+  return val;
+}
+
+// ----- Simple relativistic lensing approximation -----
+vec2 lens(vec2 uv, vec2 bhPos, float rs, float spin){
+  vec2 d = uv - bhPos;
+  float r = length(d);
+  float bend = rs / (r + 0.001);
+  float ang = atan(d.y, d.x) + spin * bend;
+  return bhPos + bend * vec2(cos(ang), sin(ang));
+}
+
+// ----- Main Rendering -----
+void main(){
+  // Base starfield (tiled)
+  vec3 col = texture2D(uStars, vUV * 4.0).rgb;
+
+  // --- Compute BH positions along a double‑spiral ---
+  float theta = uProg * 6.2831 * 2.0;      // two full rotations over the loop
+  float radius = mix(0.45, 0.05, uProg);   // start far, converge near centre
+  vec2 dir = vec2(cos(theta), sin(theta));
+
+  // Milky Way BH (smaller)
+  vec2 bh1Pos = vec2(0.5) + dir * radius;
+  float bh1RS = 0.015;                    // Schwarzschild radius (relative)
+  float bh1Spin = 0.7;
+
+  // Andromeda BH (larger, ~25× mass)
+  vec2 bh2Pos = vec2(0.5) - dir * radius * 0.8;
+  float bh2RS = bh1RS * sqrt(100.0);      // scale by sqrt(mass ratio)
+  float bh2Spin = 0.9;
+
+  // Apply lensing from both BHs (pre‑merge)
+  vec2 uv = vUV;
+  uv = lens(uv, bh1Pos, bh1RS, bh1Spin);
+  uv = lens(uv, bh2Pos, bh2RS, bh2Spin);
+
+  // ----- Accretion disks -----
+  vec2 d1 = uv - bh1Pos;
+  vec2 d2 = uv - bh2Pos;
+  float r1 = length(d1);
+  float r2 = length(d2);
+  float disk1 = smoothstep(bh1RS*1.2, bh1RS*0.4, r1);
+  float disk2 = smoothstep(bh2RS*1.2, bh2RS*0.4, r2);
+  float pat1 = fbm(d1*30.0 + uTime*0.2);
+  float pat2 = fbm(d2*30.0 + uTime*0.2);
+  vec3 diskCol = mix(vec3(0.9,0.4,0.1), vec3(1.0,0.8,0.6),
+                    clamp(pat1+pat2, 0.0, 1.0));
+  col = mix(col, diskCol, max(disk1, disk2) * 0.7);
+
+  // ----- Photon rings (thin bright rims) -----
+  float ring1 = smoothstep(bh1RS*0.95, bh1RS*0.93, r1) -
+                smoothstep(bh1RS*1.05, bh1RS*1.07, r1);
+  float ring2 = smoothstep(bh2RS*0.95, bh2RS*0.93, r2) -
+                smoothstep(bh2RS*1.05, bh2RS*1.07, r2);
+  col = mix(col, vec3(1.2,0.9,0.7), (ring1+ring2) * 0.8);
+
+  // ----- Final flare when the two BHs coalesce (last 20% of loop) -----
+  if (uProg > 0.8){
+    float flare = smoothstep(0.8, 1.0, uProg);
+    col += vec3(1.0,0.6,0.3) * pow(flare, 3.0) * 0.4;
+  }
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+// ---------- Compile & Link ----------
+const program = createProgram(gl, vs, fs);
+gl.useProgram(program);
+
+// ---------- Full‑screen Quad ----------
+const quad = new Float32Array([-1,-1,  1,-1,  -1,1,  1,1]);
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+const aPosLoc = gl.getAttribLocation(program, 'aPos');
+gl.enableVertexAttribArray(aPosLoc);
+gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
+
+// ---------- Uniform Locations ----------
+const uStarsLoc = gl.getUniformLocation(program, 'uStars');
+const uTimeLoc  = gl.getUniformLocation(program, 'uTime');
+const uProgLoc  = gl.getUniformLocation(program, 'uProg');
+
+// ---------- Load Starfield Texture ----------
+const starImg = new Image();
+starImg.crossOrigin = 'anonymous';
+starImg.src = 'https://cdn.esahubble.org/archives/images/large/opo1220b.jpg';
+starImg.onload = () => {
+  const tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,starImg);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.REPEAT);
+  gl.uniform1i(uStarsLoc,0);
+  requestAnimationFrame(render);
+};
+
+// ---------- Animation Loop ----------
+let startTime = performance.now();
+const slider = document.getElementById('slider');
+
+function render(now){
+  const elapsed = (now - startTime) / 1000.0;       // seconds
+  const prog = (elapsed % 300) / 300.0;            // 0‑1 loop
+  slider.value = (elapsed % 300).toFixed(2);
+
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(0,0,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  gl.uniform1f(uTimeLoc, elapsed);
+  gl.uniform1f(uProgLoc, prog);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  requestAnimationFrame(render);
+}
+
+// ---------- Slider Interaction ----------
+slider.addEventListener('input', e=>{
+  const t = parseFloat(e.target.value);
+  startTime = performance.now() - t*1000;
+});
+</script>
+</body>
+</html>

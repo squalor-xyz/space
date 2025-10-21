@@ -1,0 +1,39 @@
+deepseek-merge-prompt.txt
+
+Generate a hyper-realistic 4K WebGL simulation of two supermassive black holes merging - representing the future collision between Milky Way and Andromeda galaxies. The simulation must include:
+
+GALACTIC MERGER DYNAMICS:
+- Two black holes with realistic mass ratio (Milky Way: ~4e6 Msun, Andromeda: ~1e8 Msun)
+- Initial wide separation with spiral inspiral over 300-second loop
+- Merger trigger at progress > 0.8 with:
+  * Position averaging into single black hole
+  * Schwarzschild radius scaling by sqrt(combined mass ratio)
+  * 5-second bright flare during merger
+- Dual gravitational lensing that sums deflections pre-merger
+- Tidal interaction effects between accretion disks during close approach
+
+BLACK HOLE CHARACTERISTICS:
+- Milky Way BH: rs ~0.02, spin ~0.7, golden accretion disk
+- Andromeda BH: rs ~0.02*sqrt(mass_ratio), spin ~0.9, blueish accretion disk  
+- Independent disks/rings until merger, then unified system
+- Realistic lensing distortion of background galaxy image
+
+VISUAL COMPLEXITY:
+- Background: Tileable merged galaxy image (Hubble visualization)
+- Color progression: Golden + blue disks → red/orange merger flare
+- Smooth orbital decay with spiral turns
+- Continuous 300s animation with progress slider control
+- Optimized shaders maintaining 60 FPS at 4K resolution
+
+TECHNICAL SPECIFICATION:
+- Self-contained WebGL1 implementation
+- High-precision floating point
+- Linear texture filtering for background
+- Proper alpha blending for overlay effects
+- Cross-origin image loading with fallbacks
+- Mid-range GPU optimization (limited FBM octaves)
+
+LICENSE NOTICE:
+- Top-left div with exact text: "This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). Hosted at https://jrobb.org/space/merge.html. Source: https://github.com/squalor-xyz/space/blob/main/merge.html."
+
+Create a visually spectacular representation of one of the most dramatic events in cosmic evolution.

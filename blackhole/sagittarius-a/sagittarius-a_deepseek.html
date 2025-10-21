@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sagittarius A* - Hyper-realistic Black Hole Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        .slider-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            z-index: 100;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            outline: none;
+        }
+        .notice {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: rgba(255,255,255,0.7);
+            font-size: 12px;
+            background: rgba(0,0,0,0.5);
+            padding: 8px;
+            border-radius: 4px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div class="notice">
+        This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). 
+        Hosted at https://jrobb.org/space/sagittarius-a.html. 
+        Source: https://github.com/squalor-xyz/space/blob/main/sagittarius-a.html
+    </div>
+    <div class="slider-container">
+        <input type="range" id="progress" min="0" max="1000" value="0">
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl');
+        const progressSlider = document.getElementById('progress');
+        
+        if (!gl) {
+            alert('WebGL not supported!');
+            throw new Error('WebGL not supported');
+        }
+
+        // Set canvas size to 4K
+        canvas.width = 3840;
+        canvas.height = 2160;
+
+        // Vertex shader for fullscreen quad
+        const vertexShaderSource = `
+            attribute vec2 a_position;
+            varying vec2 v_uv;
+            void main() {
+                v_uv = a_position * 0.5 + 0.5;
+                gl_Position = vec4(a_position, 0.0, 1.0);
+            }
+        `;
+
+        // Fragment shader for Sagittarius A* simulation
+        const fragmentShaderSource = `
+            precision highp float;
+            
+            uniform float u_time;
+            uniform float u_progress;
+            uniform vec2 u_resolution;
+            uniform sampler2D u_background;
+            
+            varying vec2 v_uv;
+            
+            // Constants for Sagittarius A*
+            const float RS = 0.015;        // Schwarzschild radius
+            const float SPIN = 0.7;        // Black hole spin
+            const float STRENGTH = 0.3;    // Lensing strength
+            const vec3 DISK_COLOR = vec3(0.8, 0.6, 0.2);
+            const vec3 RING_COLOR = vec3(1.0, 0.8, 0.4);
+            
+            // Hash function for procedural noise
+            float hash(vec2 p) {
+                return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+            }
+            
+            // Simple noise function
+            float noise(vec2 p) {
+                vec2 i = floor(p);
+                vec2 f = fract(p);
+                f = f * f * (3.0 - 2.0 * f);
+                
+                float a = hash(i);
+                float b = hash(i + vec2(1.0, 0.0));
+                float c = hash(i + vec2(0.0, 1.0));
+                float d = hash(i + vec2(1.0, 1.0));
+                
+                return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+            }
+            
+            // Fractional Brownian Motion (3 octaves)
+            float fbm(vec2 p) {
+                float value = 0.0;
+                float amplitude = 0.5;
+                float frequency = 1.0;
+                
+                for (int i = 0; i < 3; i++) {
+                    value += amplitude * noise(frequency * p);
+                    amplitude *= 0.5;
+                    frequency *= 2.0;
+                }
+                return value;
+            }
+            
+            // Gravitational lensing distortion
+            vec2 lensing(vec2 uv, vec2 bhPos, float rs, float spin) {
+                vec2 r = uv - bhPos;
+                float rLen = length(r);
+                
+                if (rLen < 0.001) return uv;
+                
+                float theta = atan(r.y, r.x);
+                float deflection = rs / rLen;
+                
+                // Add spin effect (frame dragging)
+                deflection *= (1.0 + spin * 0.5 * sin(theta * 2.0 + u_time * 0.5));
+                
+                return uv - deflection * r / rLen;
+            }
+            
+            // Accretion disk
+            vec3 accretionDisk(vec2 uv, vec2 bhPos, float time) {
+                vec2 r = uv - bhPos;
+                float dist = length(r);
+                float angle = atan(r.y, r.x);
+                
+                // Disk inner and outer radii
+                float innerRadius = RS * 2.0;
+                float outerRadius = RS * 6.0;
+                
+                if (dist < innerRadius || dist > outerRadius) {
+                    return vec3(0.0);
+                }
+                
+                // Rotating disk with turbulence
+                float rotation = -time * 0.3 + dist * 2.0;
+                float turbulence = fbm(vec2(angle * 8.0 + rotation, dist * 4.0));
+                
+                // Disk density profile
+                float density = 1.0 - smoothstep(innerRadius, outerRadius, dist);
+                density *= (0.8 + 0.2 * turbulence);
+                
+                // Temperature gradient (hotter closer to BH)
+                float temp = 1.0 - (dist - innerRadius) / (outerRadius - innerRadius);
+                vec3 color = mix(DISK_COLOR, RING_COLOR, temp);
+                
+                // Add time-based glow variation
+                float glow = 0.5 + 0.5 * sin(time * 0.7);
+                color *= density * (0.8 + 0.2 * glow);
+                
+                return color;
+            }
+            
+            void main() {
+                vec2 uv = (v_uv - 0.5) * vec2(u_resolution.x / u_resolution.y, 1.0);
+                vec2 bhPos = vec2(0.0);
+                
+                // Apply gravitational lensing
+                vec2 lensedUV = lensing(uv, bhPos, RS * STRENGTH, SPIN);
+                lensedUV = (lensedUV + 0.5) * vec2(u_resolution.y / u_resolution.x, 1.0) + 0.5;
+                
+                // Sample background with lensing
+                vec3 bg = texture2D(u_background, fract(lensedUV)).rgb;
+                
+                // Add accretion disk
+                vec3 disk = accretionDisk(uv, bhPos, u_time);
+                
+                // Event horizon (black circle)
+                float distToBH = length(uv - bhPos);
+                if (distToBH < RS * 1.1) {
+                    bg = vec3(0.0);
+                }
+                
+                // Combine background and disk
+                vec3 finalColor = bg + disk;
+                
+                // Apply progress-based fade in/out for looping
+                float progress = u_progress;
+                finalColor *= smoothstep(0.0, 0.1, progress) * smoothstep(1.0, 0.9, progress);
+                
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `;
+
+        // Compile shader
+        function compileShader(source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = compileShader(vertexShaderSource, gl.VERTEX_SHADER);
+        const fragmentShader = compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER);
+
+        // Create program
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Program link error:', gl.getProgramInfoLog(program));
+        }
+
+        gl.useProgram(program);
+
+        // Set up vertex buffer for fullscreen quad
+        const positions = new Float32Array([
+            -1, -1, 1, -1, -1, 1,
+            -1,  1, 1, -1,  1, 1
+        ]);
+
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+        const positionLocation = gl.getAttribLocation(program, 'a_position');
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // Set uniforms
+        const timeLocation = gl.getUniformLocation(program, 'u_time');
+        const progressLocation = gl.getUniformLocation(program, 'u_progress');
+        const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
+        
+        gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+
+        // Create texture for background
+        const backgroundTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, backgroundTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, 
+                     new Uint8Array([50, 50, 100])); // Temporary blue color
+        
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+        // Load background image
+        const backgroundImage = new Image();
+        backgroundImage.crossOrigin = "anonymous";
+        backgroundImage.onload = function() {
+            gl.bindTexture(gl.TEXTURE_2D, backgroundTexture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, backgroundImage);
+        };
+        backgroundImage.src = 'https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_4k_print.jpg';
+
+        const backgroundLocation = gl.getUniformLocation(program, 'u_background');
+        gl.uniform1i(backgroundLocation, 0);
+
+        // Enable blending for smooth transitions
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        // Animation loop
+        let startTime = performance.now();
+        let progress = 0;
+        const LOOP_DURATION = 300; // 300 seconds
+
+        function animate(currentTime) {
+            const elapsed = (currentTime - startTime) / 1000;
+            progress = (elapsed % LOOP_DURATION) / LOOP_DURATION;
+            
+            // Update slider to match current progress
+            progressSlider.value = progress * 1000;
+            
+            gl.uniform1f(timeLocation, elapsed);
+            gl.uniform1f(progressLocation, progress);
+            
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            requestAnimationFrame(animate);
+        }
+
+        // Handle slider input
+        progressSlider.addEventListener('input', function() {
+            progress = this.value / 1000;
+            startTime = performance.now() - (progress * LOOP_DURATION * 1000);
+        });
+
+        // Start animation
+        requestAnimationFrame(animate);
+
+        // Handle resize
+        window.addEventListener('resize', function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Galaxy Merger — WebGL Simulation</title>
+<style>
+  html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  #ui{
+    position:fixed;left:12px;top:12px;color:#ddd;font-size:13px;background:rgba(0,0,0,0.45);
+    padding:8px 10px;border-radius:8px;backdrop-filter: blur(4px);z-index:20;max-width:42vw;
+  }
+  #notice{font-size:11px;line-height:1.2;color:#cfcfcf}
+  #controls{margin-top:8px;display:flex;gap:8px;align-items:center}
+  label{font-size:12px;color:#eee}
+  input[type=range]{width:360px}
+  canvas{display:block; width:100vw; height:100vh; }
+</style>
+</head>
+<body>
+<div id="ui">
+  <div id="notice">
+    This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). Hosted at https://jrobb.org/space/merge.html. Source: https://github.com/squalor-xyz/space/blob/main/merge.html
+  </div>
+  <div id="controls">
+    <label for="progress">Loop progress</label>
+    <input id="progress" type="range" min="0" max="1" step="0.0001" value="0.0"/>
+    <button id="reset">Reset</button>
+    <div style="margin-left:8px;font-size:12px;color:#ddd" id="timeLabel">0s</div>
+  </div>
+</div>
+
+<canvas id="glcanvas"></canvas>
+
+<script id="vs" type="x-shader/x-vertex">
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main(){
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos,0,1);
+}
+</script>
+
+<script id="fs" type="x-shader/x-fragment">
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_starTex;
+uniform float u_time;
+uniform float u_progress;
+uniform vec2 u_resolution;
+
+// black hole params for two BHs
+uniform float u_rs1;
+uniform float u_rs2;
+uniform float u_spin1;
+uniform float u_spin2;
+uniform float u_strength1;
+uniform float u_strength2;
+uniform vec2 u_pos1; // in normalized -1..1 clip coords (centered)
+uniform vec2 u_pos2;
+
+#define PI 3.141592653589793
+#define TWO_PI 6.283185307179586
+
+// Lightweight hash
+float hash12(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
+
+// Sample star field via tiling (fract)
+vec3 sampleStar(vec2 uv){
+  vec2 tileUV = fract(uv * 3.0 + vec2(u_time*0.0005, -u_time*0.0002));
+  vec3 s = texture2D(u_starTex, tileUV).rgb;
+  return s;
+}
+
+// lensing deflection contribution from a BH at pos with parameters
+vec2 lensDeflect(vec2 p, vec2 bhPos, float rs, float strength, float spin){
+  vec2 dp = p - bhPos;
+  float r = length(dp) + 1e-6;
+  vec2 dir = normalize(dp);
+  float alpha = strength * rs / r;
+  float tangential = spin * 0.45 * rs / r;
+  vec2 perp = vec2(-dir.y, dir.x);
+  return dir * alpha + perp * tangential;
+}
+
+// accretion disk contribution (simple)
+vec3 diskColor(vec2 p, vec2 bhPos, float rs, float rot, float spin){
+  vec2 rel = (p - bhPos);
+  float r = length(rel);
+  float ang = atan(rel.y, rel.x);
+  float localRot = rot * (1.0 + 0.2*spin);
+  float ring = exp(-pow((r - 0.12)*30.0,2.0)) + 0.6*exp(-pow((r - 0.23)*25.0,2.0));
+  float beaming = 1.0 + 0.6*spin*cos(ang - localRot);
+  vec3 base = mix(vec3(1.0,0.8,0.5), vec3(0.9,0.4,0.15), smoothstep(0.05,0.3,r));
+  base *= 1.0 + 0.25 * (hash12(rel * 100.0) - 0.5);
+  return base * ring * beaming * exp(-r*2.5);
+}
+
+void main(){
+  vec2 uv = v_uv;
+  // map uv to -aspect..aspect, -1..1
+  float aspect = u_resolution.x / u_resolution.y;
+  vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
+
+  // compute dynamic BH positions driven by progress (progress 0..1 over 300s)
+  // positions supplied via uniforms u_pos1/u_pos2, so here just use p for optics
+
+  // Combined lensing: sample background with sum of deflections
+  // sample background in multiple passes: background, lensed by BH1, BH2, and combined
+  vec3 background = sampleStar(uv);
+
+  // compute deflection at pixel from both BHs
+  vec2 def1 = lensDeflect(p, u_pos1, u_rs1, u_strength1, u_spin1);
+  vec2 def2 = lensDeflect(p, u_pos2, u_rs2, u_strength2, u_spin2);
+  // pre-merge: two separate deflections; near merge, sum and then single remapping
+  vec2 defCombined = def1 + def2;
+  // create lensed uv
+  vec2 lensed = (p + defCombined) / vec2(aspect, 1.0) + 0.5;
+  vec3 lensedBG = sampleStar(lensed);
+
+  // accretion disks: rotate each disk with independent rotation speeds; rotation accelerates slightly during merger
+  float rot1 = u_time * 0.12 * (1.0 + 0.5 * (1.0 - u_progress));
+  float rot2 = u_time * -0.16 * (1.0 + 0.6 * (1.0 - u_progress));
+  vec3 disk1 = diskColor(p, u_pos1, u_rs1, rot1, u_spin1);
+  vec3 disk2 = diskColor(p, u_pos2, u_rs2, rot2, u_spin2);
+
+  // tidal bridge: simple smoothstep-based enhancement between disks
+  float dBetween = length(u_pos1 - u_pos2);
+  float midDist = length(p - (u_pos1 + u_pos2)*0.5);
+  float bridge = smoothstep(0.0, 0.5, 1.0 - abs(midDist*2.0 - dBetween));
+  // attenuate pre-merge and peak near 0.6..0.9 progress
+  float bridgeStrength = smoothstep(0.2, 0.85, u_progress) * (1.0 - smoothstep(0.9, 1.0, u_progress));
+  bridge *= bridgeStrength;
+
+  // merge flash: near progress > 0.8 create flare
+  float flare = smoothstep(0.8, 0.95, u_progress) * (1.0 - smoothstep(0.95, 1.0, u_progress));
+  vec3 flareCol = vec3(1.0, 0.95, 0.8) * flare * exp(-length(p - (u_pos1*0.5 + u_pos2*0.5))*40.0) * 4.0;
+
+  // photon rings/halo: emphasize near each BH
+  float halo1 = exp(-pow((length(p - u_pos1) - u_rs1*1.6)*40.0, 2.0));
+  float halo2 = exp(-pow((length(p - u_pos2) - u_rs2*1.6)*40.0, 2.0));
+  vec3 haloCol = vec3(1.0,0.85,0.6) * (halo1 + halo2) * 0.9;
+
+  // combined color
+  vec3 color = background * 0.8 + lensedBG * 0.5;
+  color += disk1 * (1.0 - smoothstep(0.65, 1.0, length(p - u_pos1))) * 1.6;
+  color += disk2 * (1.0 - smoothstep(0.65, 1.0, length(p - u_pos2))) * 1.6;
+  color += haloCol;
+  color += flareCol;
+  // add tidal bridge glow
+  color += vec3(0.9,0.6,0.4) * bridge * 0.8;
+
+  // a final composite around merged remnant if progress > 0.85: average positions and increase brightness briefly
+  if(u_progress > 0.85){
+    vec2 mergedPos = (u_pos1 + u_pos2) * 0.5;
+    float mergedRad = mix(u_rs1, u_rs2, 0.5) * 1.7;
+    float mergedGlow = exp(-pow(length(p - mergedPos)/ (mergedRad*2.5), 2.0));
+    color += vec3(1.0,0.9,0.7) * mergedGlow * (0.7 + 2.0 * flare);
+  }
+
+  // vignette & tone map
+  float r = length(p);
+  color *= smoothstep(1.4, 0.8, r);
+  color = color / (color + vec3(1.0));
+  color = pow(color, vec3(0.95, 0.98, 1.0));
+  gl_FragColor = vec4(color, 1.0);
+}
+</script>
+
+<script>
+(function(){
+  const canvas = document.getElementById('glcanvas');
+  const gl = canvas.getContext('webgl', { antialias:true });
+  if(!gl){ alert("WebGL not supported"); return; }
+
+  // internal 4K target but adapt to viewport
+  const MAX_W = 3840, MAX_H = 2160;
+  const DPR = window.devicePixelRatio || 1;
+  canvas.width = Math.min(MAX_W, Math.floor(window.innerWidth * DPR));
+  canvas.height = Math.min(MAX_H, Math.floor(window.innerHeight * DPR));
+  canvas.style.width = "100vw";
+  canvas.style.height = "100vh";
+
+  function compile(type, src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+      console.error(gl.getShaderInfoLog(s));
+      throw "Shader compile failed";
+    }
+    return s;
+  }
+
+  const vs = document.getElementById('vs').textContent;
+  const fs = document.getElementById('fs').textContent;
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){ console.error(gl.getProgramInfoLog(prog)); }
+  gl.useProgram(prog);
+
+  // attributes
+  const aPos = gl.getAttribLocation(prog, 'a_pos');
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  // uniforms
+  const u_time = gl.getUniformLocation(prog, 'u_time');
+  const u_progress = gl.getUniformLocation(prog, 'u_progress');
+  const u_resolution = gl.getUniformLocation(prog, 'u_resolution');
+  const u_starTex = gl.getUniformLocation(prog, 'u_starTex');
+
+  const u_rs1 = gl.getUniformLocation(prog, 'u_rs1');
+  const u_rs2 = gl.getUniformLocation(prog, 'u_rs2');
+  const u_spin1 = gl.getUniformLocation(prog, 'u_spin1');
+  const u_spin2 = gl.getUniformLocation(prog, 'u_spin2');
+  const u_strength1 = gl.getUniformLocation(prog, 'u_strength1');
+  const u_strength2 = gl.getUniformLocation(prog, 'u_strength2');
+  const u_pos1 = gl.getUniformLocation(prog, 'u_pos1');
+  const u_pos2 = gl.getUniformLocation(prog, 'u_pos2');
+
+  // default BH params (realistic-ish):
+  // Milky Way BH (~4e6 Msun) normalized rs ~ 0.02
+  // Andromeda BH larger (we'll scale by sqrt mass ratio)
+  const rs1 = 0.02; // BH1 (Milky Way)
+  const rs2 = 0.02 * Math.sqrt(100.0 / 4.0); // example approximate (scale up)
+  const spin1 = 0.7, spin2 = 0.9;
+  const strength1 = 0.28, strength2 = 0.33;
+
+  gl.uniform1f(u_rs1, rs1);
+  gl.uniform1f(u_rs2, rs2);
+  gl.uniform1f(u_spin1, spin1);
+  gl.uniform1f(u_spin2, spin2);
+  gl.uniform1f(u_strength1, strength1);
+  gl.uniform1f(u_strength2, strength2);
+
+  // star texture
+  const starImg = new Image();
+  starImg.crossOrigin = "anonymous";
+  starImg.src = "https://cdn.esahubble.org/archives/images/large/opo1220b.jpg"; // background galaxy image
+  const starTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, starTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([8,8,12]));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+  starImg.onload = function(){
+    gl.bindTexture(gl.TEXTURE_2D, starTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    try{
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE, starImg);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.generateMipmap(gl.TEXTURE_2D);
+    }catch(e){
+      console.warn("Texture upload issue", e);
+    }
+  }
+
+  // blending & GL state
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  // UI
+  const progSlider = document.getElementById('progress');
+  const resetBtn = document.getElementById('reset');
+  const timeLabel = document.getElementById('timeLabel');
+  let manualProgress = parseFloat(progSlider.value);
+  progSlider.addEventListener('input', (e)=>{ manualProgress = parseFloat(e.target.value); });
+  resetBtn.addEventListener('click', ()=>{ progSlider.value = 0; manualProgress = 0; });
+
+  // Merger path logic: two BHs spiral inward
+  // We'll compute positions in JS and send to shader each frame.
+  const LOOP = 300.0;
+  let tstart = performance.now() * 0.001;
+
+  function computePositions(progress){
+    // Start positions: left/right offset in normalized screen coords (-0.6..0.6)
+    const startAmp = 0.6;
+    // amplitude decreases with progress to spiral in
+    const amp = startAmp * (1.0 - smoothstep(0.0, 0.95, progress));
+    // angular speed increases as they spiral
+    const turns = 2.0 + 3.0 * progress; // total turns across the loop
+    const theta = progress * turns * Math.PI;
+    // orientation slight tilt
+    const tilt = 0.25;
+    // positions in centered coordinate (x,y)
+    const x1 = -amp * Math.cos(theta);
+    const y1 = amp * Math.sin(theta) * tilt;
+    const x2 = amp * Math.cos(theta + Math.PI*0.5);
+    const y2 = -amp * Math.sin(theta + Math.PI*0.5) * tilt;
+    return { p1: [x1, y1], p2: [x2, y2] };
+  }
+
+  // smoothstep helper
+  function smoothstep(a,b,x){ return Math.max(0, Math.min(1, (x-a)/(b-a))); }
+
+  function render(nowMs){
+    const now = nowMs * 0.001;
+    const progress = manualProgress; // controlled by slider per prompt
+    const virtualT = progress * LOOP;
+    const dynT = (now - tstart) + virtualT;
+
+    gl.viewport(0,0, canvas.width, canvas.height);
+    gl.uniform1f(u_time, dynT);
+    gl.uniform1f(u_progress, progress);
+    gl.uniform2f(u_resolution, canvas.width, canvas.height);
+
+    // compute BH positions and upload
+    const pos = computePositions(progress);
+    gl.uniform2f(u_pos1, pos.p1[0], pos.p1[1]);
+    gl.uniform2f(u_pos2, pos.p2[0], pos.p2[1]);
+
+    // bind star texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, starTex);
+    gl.uniform1i(u_starTex, 0);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    timeLabel.textContent = Math.floor(progress * LOOP) + "s";
+    requestAnimationFrame(render);
+  }
+
+  requestAnimationFrame(render);
+
+  // resize handling
+  function onResize(){
+    const DPR = window.devicePixelRatio || 1;
+    const w = Math.min(MAX_W, Math.floor(window.innerWidth * DPR));
+    const h = Math.min(MAX_H, Math.floor(window.innerHeight * DPR));
+    if(canvas.width !== w || canvas.height !== h){
+      canvas.width = w; canvas.height = h;
+    }
+  }
+  window.addEventListener('resize', onResize);
+
+})();
+</script>
+</body>
+</html>

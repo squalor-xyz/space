@@ -1,0 +1,24 @@
+Create an expert-level hyper-realistic WebGL simulation of Sagittarius A*, the supermassive black hole at the center of our Milky Way galaxy. 
+
+
+
+the blackhole should be fixed, and fully visible.
+
+the photon ring should be swirling realistically.
+
+the simulation should loop and play continuously
+
+
+
+as high resolution as is possible to render, running on modern web browsers (especially firefox).
+
+output is an html file, which may contain javascript, as long as the html file is all that is needed for the simulation to render and run.
+
+
+
+LICENSE NOTICE:
+
+- Top-left div with exact text: "This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). Hosted at https://jrobb.org/space/sagittarius-a.html. Source: https://github.com/squalor-xyz/space/blob/main/sagittarius-a.html."
+
+Focus on creating a scientifically plausible yet visually stunning representation that captures the awe-inspiring nature of our galaxy's central black hole.
+

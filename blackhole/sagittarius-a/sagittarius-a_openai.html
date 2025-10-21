@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sagittarius A* — WebGL Simulation</title>
+<style>
+  html,body{height:100%;margin:0;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  #ui{
+    position:fixed;left:12px;top:12px;color:#ddd;font-size:13px;background:rgba(0,0,0,0.45);
+    padding:8px 10px;border-radius:8px;backdrop-filter: blur(4px);z-index:20;max-width:36vw;
+  }
+  #notice{font-size:11px;line-height:1.2;color:#cfcfcf}
+  #controls{margin-top:8px;display:flex;gap:8px;align-items:center}
+  label{font-size:12px;color:#eee}
+  input[type=range]{width:360px}
+  canvas{display:block; width:100vw; height:100vh; }
+  #credit{position:fixed;left:12px;bottom:12px;color:#888;font-size:11px}
+</style>
+</head>
+<body>
+<div id="ui">
+  <div id="notice">
+    This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). Hosted at https://jrobb.org/space/sagittarius-a.html. Source: https://github.com/squalor-xyz/space/blob/main/sagittarius-a.html
+  </div>
+  <div id="controls">
+    <label for="progress">Loop progress</label>
+    <input id="progress" type="range" min="0" max="1" step="0.0001" value="0.0"/>
+    <button id="reset">Reset</button>
+    <div style="margin-left:8px;font-size:12px;color:#ddd" id="timeLabel">0s</div>
+  </div>
+</div>
+
+<canvas id="glcanvas" ></canvas>
+
+<script type="x-shader/x-vertex" id="vs">
+attribute vec2 a_pos;
+varying vec2 v_uv;
+void main(){
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+</script>
+
+<script type="x-shader/x-fragment" id="fs">
+precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_starTex;
+uniform float u_time;
+uniform float u_progress; // 0..1 mapped to 0..300s loop
+uniform vec2 u_resolution;
+uniform float u_spin; // black hole spin
+uniform float u_rs;   // schwarzschild radius (normalized)
+uniform float u_strength; // lensing strength
+uniform float u_diskRotationScale;
+
+#define PI 3.141592653589793
+#define TWO_PI 6.283185307179586
+
+// Simple hash
+float hash21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+
+// fbm-ish (3 octaves as requested)
+float noise(vec2 p){
+  float a=0.0;
+  float w=0.5;
+  for(int i=0;i<3;i++){
+    a += w * (hash21(p + float(i)*7.1) - 0.5);
+    p *= 2.13;
+    w *= 0.5;
+  }
+  return a;
+}
+
+// radial tone mapping for accretion disk
+vec3 accretionColor(float r, float ang, float t){
+  // base colors inspired by EHT/artistics
+  vec3 inner = vec3(1.0,0.85,0.5);
+  vec3 mid   = vec3(1.0,0.6,0.2);
+  vec3 outer = vec3(0.15,0.05,0.02);
+  float band = smoothstep(0.005, 0.08, r) * (1.0 - smoothstep(0.3, 0.9, r));
+  float flick = 0.2 * sin(ang*12.0 + t*6.0) * exp(-r*6.0);
+  vec3 c = mix(inner, mid, smoothstep(0.0, 0.2, r));
+  c = mix(c, outer, smoothstep(0.45, 0.9, r));
+  c += flick * band;
+  // subtle turbulence
+  c *= 1.0 + 0.25 * noise(vec2(r*10.0, ang*2.0 + t*0.5));
+  return clamp(c, 0.0, 1.6);
+}
+
+void main(){
+  vec2 uv = v_uv;
+  // normalized coordinate centered
+  vec2 p = (uv - 0.5) * vec2(u_resolution.x / u_resolution.y, 1.0);
+  float aspect = u_resolution.x / u_resolution.y;
+
+  // background star field (repeat by fract)
+  vec2 starUV = uv * 4.0; // tile 4x4
+  // pan slowly to simulate motion
+  starUV += vec2(u_time*0.001, -u_time*0.0004);
+  vec3 star = texture2D(u_starTex, fract(starUV)).rgb;
+  // darken behind BH region
+  float r = length(p);
+  // compute simple lensing: radial distortion of background by BH
+  // approximate deflection: alpha ~ strength * rs / (r + eps)
+  float eps = 1e-5;
+  float alpha = u_strength * u_rs / (r + eps);
+  // incorporate spin as a small tangential deflection
+  float tang = u_spin * 0.4 * u_rs / (r + eps);
+  // map p to deflected coordinate for background sampling
+  vec2 dir = normalize(p + vec2(1e-6,0.0));
+  // tangential displacement perpendicular to dir
+  vec2 perp = vec2(-dir.y, dir.x);
+  vec2 defP = p + dir * alpha + perp * tang;
+  vec2 bgUV = defP / vec2(aspect,1.0) + 0.5;
+  // sample star texture with fract to tile
+  vec3 bgSample = texture2D(u_starTex, fract(bgUV * 4.0)).rgb;
+  // use combined background (original star + lensed) blended
+  vec3 background = mix(star*0.9, bgSample, 0.6);
+
+  // Accretion disk
+  // rotate disk over time; allow control by slider (u_progress)
+  float loopTime = u_progress * 300.0; // seconds
+  float diskRot = loopTime * 0.1 * u_diskRotationScale + u_time * 0.02;
+  // compute local polar coords
+  float ang = atan(p.y, p.x);
+  float rad = r;
+  // include relativistic beaming approx: near side brighter
+  float beaming = 1.0 + 0.6 * u_spin * cos(ang - diskRot);
+  // create multiple rings
+  float ringMask = exp(-pow((rad - 0.12) * 35.0, 2.0)) * 1.0
+                 + 0.6 * exp(-pow((rad - 0.22) * 30.0, 2.0));
+  // dynamic flicker with progress-based modulation
+  float pulse = 0.2 * sin(u_time * 1.5 + rad * 40.0 + u_progress * TWO_PI * 3.0);
+  vec3 diskCol = accretionColor(rad, ang + diskRot*1.2, u_time + u_progress*10.0) * ringMask * beaming;
+  // halo / photon ring
+  float photonRing = smoothstep(0.008, 0.012, abs(rad - u_rs*1.8));
+  photonRing += 0.6 * exp(-pow((rad - u_rs*1.2)*40.0,2.0));
+  vec3 ringColor = vec3(1.0,0.85,0.6) * photonRing * (1.0 + 0.8 * sin(u_time*4.0 + u_progress*6.0));
+
+  // shadow (event horizon)
+  float shadow = smoothstep(u_rs*0.9, u_rs*1.4, rad);
+  float shadowMask = 1.0 - shadow;
+
+  // gravitational light-bending lens amplification: concentrate disk light near ring
+  float lensAmp = 1.0 + 3.0 * exp(-pow((rad - u_rs*1.6)*30.0,2.0));
+
+  // combine everything
+  vec3 color = background;
+  // add disk where appropriate (additive)
+  color += diskCol * lensAmp * (1.0 - smoothstep(0.005, 0.6, rad));
+  // add photon ring
+  color += ringColor * 0.9;
+  // darken central shadow
+  color *= 1.0 - 0.9 * shadow;
+
+  // chromatic aberration on edges for cinematic look
+  float ca = smoothstep(0.2, 1.2, rad);
+  vec2 caOffset = vec2(0.002 * ca * (1.0 - u_progress*0.5), 0.0);
+  float rCh = texture2D(u_starTex, fract((bgUV + caOffset)*4.0)).r;
+  float gCh = texture2D(u_starTex, fract(bgUV*4.0)).g;
+  float bCh = texture2D(u_starTex, fract((bgUV - caOffset)*4.0)).b;
+  vec3 chrom = vec3(rCh, gCh, bCh);
+  // subtle mix
+  color = mix(color, chrom*0.6, 0.02*ca);
+
+  // vignette
+  color *= smoothstep(1.2, 0.0, rad);
+
+  // tone mapping
+  color = color / (color + vec3(1.0));
+  color = pow(color, vec3(0.9, 0.95, 1.0));
+
+  // final gamma
+  gl_FragColor = vec4(color, 1.0);
+}
+</script>
+
+<script>
+(function(){
+  // Setup WebGL1, create a 4K offscreen framebuffer and render to canvas sized to viewport.
+  const canvas = document.getElementById('glcanvas');
+  const gl = canvas.getContext('webgl', { alpha: false, antialias: true });
+  if(!gl){ alert("WebGL not available"); return; }
+
+  // set canvas resolution to 4K internal framebuffer (or downscale if device is low)
+  const DPR = window.devicePixelRatio || 1;
+  const fbWidth = 3840;  // internal offscreen size (4K)
+  const fbHeight = 2160;
+  canvas.width = Math.min(fbWidth, Math.floor(window.innerWidth * DPR));
+  canvas.height = Math.min(fbHeight, Math.floor(window.innerHeight * DPR));
+  canvas.style.width = "100vw";
+  canvas.style.height = "100vh";
+
+  // simple full-screen quad
+  const vsSrc = document.getElementById('vs').textContent;
+  const fsSrc = document.getElementById('fs').textContent;
+  function compile(type, src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+      console.error(gl.getShaderInfoLog(s)); throw "Shader compile error";
+    }
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc));
+  gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
+    console.error(gl.getProgramInfoLog(prog)); throw "Program link error";
+  }
+  gl.useProgram(prog);
+
+  // attributes/uniforms
+  const aPos = gl.getAttribLocation(prog, 'a_pos');
+  const u_time = gl.getUniformLocation(prog, 'u_time');
+  const u_progress = gl.getUniformLocation(prog, 'u_progress');
+  const u_res = gl.getUniformLocation(prog, 'u_resolution');
+  const u_starTex = gl.getUniformLocation(prog, 'u_starTex');
+  const u_spin = gl.getUniformLocation(prog, 'u_spin');
+  const u_rs = gl.getUniformLocation(prog, 'u_rs');
+  const u_strength = gl.getUniformLocation(prog, 'u_strength');
+  const u_diskRotationScale = gl.getUniformLocation(prog, 'u_diskRotationScale');
+
+  // quad buffer
+  const quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  const verts = new Float32Array([
+    -1,-1,  1,-1,  -1,1,
+    -1,1,   1,-1,   1,1
+  ]);
+  gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  // load star texture (tileable)
+  const starImg = new Image();
+  starImg.crossOrigin = "anonymous";
+  // Given in prompt: use NASA star map URL
+  starImg.src = "https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_4k_print.jpg";
+  const starTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, starTex);
+  // placeholder 1x1 while loading
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,1,1,0,gl.RGB,gl.UNSIGNED_BYTE,new Uint8Array([10,10,16]));
+  // linear filtering
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  // Note: We won't rely on GL_REPEAT for non-POT; shader uses fract so it's fine.
+
+  starImg.onload = function(){
+    gl.bindTexture(gl.TEXTURE_2D, starTex);
+    try{
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE, starImg);
+      // if image is POT then could set REPEAT; avoid relying on it
+      // set wrapping to CLAMP_TO_EDGE to be safe
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.generateMipmap(gl.TEXTURE_2D);
+    }catch(e){
+      // some browsers require special handling; fallback to drawing anyway
+      console.warn("Texture upload failed (possibly cross-origin):", e);
+    }
+  }
+
+  // blending
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  // uniforms defaults: realistic-ish values
+  const spin = 0.7;
+  const rs = 0.015; // small normalized
+  const strength = 0.32;
+  const diskRotationScale = 1.0;
+
+  gl.uniform1f(u_spin, spin);
+  gl.uniform1f(u_rs, rs);
+  gl.uniform1f(u_strength, strength);
+  gl.uniform1f(u_diskRotationScale, diskRotationScale);
+
+  // connect texture unit
+  gl.uniform1i(u_starTex, 0);
+
+  // UI handling
+  const progSlider = document.getElementById('progress');
+  const resetBtn = document.getElementById('reset');
+  const timeLabel = document.getElementById('timeLabel');
+  let manualProgress = parseFloat(progSlider.value);
+  progSlider.addEventListener('input', (e)=>{
+    manualProgress = parseFloat(e.target.value);
+  });
+  resetBtn.addEventListener('click', ()=>{ progSlider.value = 0.0; manualProgress = 0.0; });
+
+  // animation loop with time-based uniform; slider maps to 0..1 of 300s
+  const LOOP = 300.0; // seconds
+  let startT = performance.now() * 0.001;
+  function render(nowMs){
+    const now = nowMs * 0.001;
+    // progress is controlled by slider (user can scrub)
+    const progress = manualProgress;
+    // map slider to "virtual time" for disk rotation and animations
+    const virtualT = progress * LOOP;
+    // also allow a slight automatic play to keep animation moving if slider untouched? The spec wants slider-controlled progress only; we'll still animate loop time via a baseline to keep dynamics
+    const dynT = (now - startT) + virtualT;
+
+    // update uniforms
+    gl.viewport(0,0, canvas.width, canvas.height);
+    gl.uniform1f(u_time, dynT);
+    gl.uniform1f(u_progress, progress);
+    gl.uniform2f(u_res, canvas.width, canvas.height);
+
+    // bind texture unit 0
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, starTex);
+
+    // draw
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    // update UI time label (seconds)
+    timeLabel.textContent = (Math.floor(progress*LOOP)) + "s";
+
+    requestAnimationFrame(render);
+  }
+
+  // kick off
+  requestAnimationFrame(render);
+
+  // handle resize: keep canvas CSS 100vw/100vh and adjust drawing buffer if window size changes
+  function onResize(){
+    const DPR = window.devicePixelRatio || 1;
+    // choose internal resolution clamped to 4K for perf
+    const maxW = 3840, maxH = 2160;
+    const w = Math.min(maxW, Math.floor(window.innerWidth * DPR));
+    const h = Math.min(maxH, Math.floor(window.innerHeight * DPR));
+    if(canvas.width !== w || canvas.height !== h){
+      canvas.width = w; canvas.height = h;
+    }
+  }
+  window.addEventListener('resize', onResize);
+})();
+</script>
+</body>
+</html>

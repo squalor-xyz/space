@@ -1,0 +1,58 @@
+You are an expert in WebGL, GLSL shader programming, and procedural graphics simulations. Your task is to generate three complete, standalone HTML files that create hyper-realistic black hole and galaxy merger simulations using raw WebGL1 and possibly JavaScript (keep it self-contained and browser-runnable). JavaScript is encouraged for setup, animation loops, uniform updates, event handling (e.g., sliders), and logic like merger paths to improve quality and smoothness, as long as it runs natively in modern browsers (especially Firefox). Each file must be self-contained, compatible with modern browsers, and render internally at least at 4K resolution via an off-screen framebuffer (drop resolution as is reasonable for File 3 to improve performance).
+Ensure smooth 60 FPS animation via requestAnimationFrame, with time-based uniforms for dynamics. Use highp float precision, linear filtering, and crossOrigin="anonymous" for background images. Enable blending (SRC_ALPHA, ONE_MINUS_SRC_ALPHA) for overlays. Backgrounds: high-res tileable images (e.g., NASA-style star fields or galaxy renders; choose fitting free URLs). Include a top-left notice div: "This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). Hosted at [URL]. Source: [GITHUB_URL]." Optimize shaders/JS for mid-range GPUs; reduce fbm octaves to 3, avoid heavy loops by using procedural noise (for File 3, limit star iterations to ~50 total).
+
+### File 1: sagittarius-a.html
+
+Hyper-realistic simulation of Sagittarius A* (supermassive black hole at Milky Way center).
+
+- Single fixed BH at center, choose realistic rs/spin/strength values (e.g., rs ~0.015, spin ~0.7, strength ~0.3).
+
+- Background: Tileable starry field (e.g., https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_4k_print.jpg, repeat wrap).
+
+- Continuous time-based animation: disk rotation/swirl, ring glow variation, modulated by slider-controlled progress.
+
+- Slider as described (300s loop).
+
+- Notice: Hosted https://jrobb.org/space/sagittarius-a.html, source https://github.com/squalor-xyz/space/blob/main/sagittarius-a.html.
+
+- No other interaction; focus on pretty, realistic black hole with accurate ring and dynamic disk distorting stars.
+
+### File 2: merge.html
+
+Hyper-realistic 4K simulation of Milky Way (smaller BH, ~4e6 Msun) merging with Andromeda (larger BH, ~1e8 Msun) over a 300s loop.
+
+- Two BHs start wide apart (e.g., amp ~0.4 decreasing with progress, theta = progress * turns * pi), spiral inward, merge at progress>0.8 (average positions, scale rs by sqrt(combined mass ratio), single disk with ~5s flare brightening, then loop reset).
+
+- Dual lensing (sum deflections pre-merge), independent disks/rings until merge; add tidal pulling between disks (e.g., density += smoothstep-based term).
+
+- Choose fitting rs/spin/strength per BH (e.g., rs1 ~0.02, rs2 ~0.02*sqrt(m2/m1), spin1 ~0.7, spin2 ~0.9).
+
+- Background: Tileable merged galaxy image (e.g., https://cdn.esahubble.org/archives/images/large/opo1220b.jpg, repeat).
+
+- Slider as in File 1 for forward/rewind control.
+
+- Notice: Hosted https://jrobb.org/space/merge.html, source https://github.com/squalor-xyz/space/blob/main/merge.html.
+
+- Both BHs match File 1's realism; pretty merger with interacting glows.
+
+### File 3: solar-system-merger.html
+
+4K visualization of solar systems amid galaxy merger (no lensing/BHs; emphasize stellar motions).
+
+- Procedural point clouds: ~50 twinkling white stars per galaxy (hash-based offsets ~0.2, wobble with sin(time + i)).
+
+- Galaxy centers follow same spiral/merger path as File 2 (mwPos/andPos).
+
+- Yellow point (size ~0.005) for our solar system orbiting mwPos (e.g., 0.1*sin/cos(time*0.0005)); cyan point for Andromeda system orbiting andPos (hide post-merge).
+
+- Background: Clamped star field (e.g., https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_4k_print.jpg, no repeat).
+
+- Continuous 300s loop with slider as in File 1.
+
+- Notice: Hosted https://jrobb.org/space/solar-system-merger.html, source https://github.com/squalor-xyz/space/blob/main/solar-system-merger.html.
+
+- Pretty and serene: subtle star trails, clear solar system highlights.
+
+-----
+
+Output each full HTML (<!DOCTYPE> to </html>) in separate ```html blocks, fully runnable/copy-paste ready. Infer realistic math/colors/details from astrophysics (e.g., EHT images) for beauty—experiment in shaders for appealing visuals (avoid hardcoded values where possible). Use specified image URLs or similar free ones; handle onload gracefully.

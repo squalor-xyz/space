@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar System Merger - Galaxy Collision Visualization</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        .slider-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            z-index: 100;
+        }
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            outline: none;
+        }
+        .notice {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: rgba(255,255,255,0.7);
+            font-size: 12px;
+            background: rgba(0,0,0,0.5);
+            padding: 8px;
+            border-radius: 4px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div class="notice">
+        This simulation is licensed under the Mozilla Public License 2.0 (MPL-2.0). 
+        Hosted at https://jrobb.org/space/solar-system-merger.html. 
+        Source: https://github.com/squalor-xyz/space/blob/main/solar-system-merger.html
+    </div>
+    <div class="slider-container">
+        <input type="range" id="progress" min="0" max="1000" value="0">
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl');
+        const progressSlider = document.getElementById('progress');
+        
+        if (!gl) {
+            alert('WebGL not supported!');
+            throw new Error('WebGL not supported');
+        }
+
+        // Use lower resolution for better performance
+        canvas.width = 1920;
+        canvas.height = 1080;
+
+        // Vertex shader for point rendering
+        const vertexShaderSource = `
+            attribute vec2 a_position;
+            attribute float a_pointSize;
+            attribute vec3 a_color;
+            attribute float a_twinkle;
+            
+            uniform float u_time;
+            uniform float u_progress;
+            uniform vec2 u_resolution;
+            
+            varying vec3 v_color;
+            varying float v_alpha;
+            
+            // Calculate galaxy center positions (same as merger simulation)
+            void calculateGalaxyPositions(float progress, out vec2 mwPos, out vec2 andPos) {
+                float spiralTurns = 3.0;
+                float angle = progress * spiralTurns * 3.14159;
+                float amplitude = 0.4 * (1.0 - progress * 0.8);
+                
+                mwPos = vec2(cos(angle), sin(angle)) * amplitude;
+                andPos = vec2(cos(angle + 3.14159), sin(angle + 3.14159)) * amplitude;
+            }
+            
+            // Hash function for consistent random values
+            float hash(float n) {
+                return fract(sin(n) * 43758.5453);
+            }
+            
+            void main() {
+                // Calculate galaxy centers
+                vec2 mwPos, andPos;
+                calculateGalaxyPositions(u_progress, mwPos, andPos);
+                
+                vec2 position = a_position;
+                float pointType = a_twinkle; // Reusing for type identification
+                
+                // Milky Way stars (indices 0-49)
+                if (pointType < 50.0) {
+                    float starIndex = pointType;
+                    float angleOffset = hash(starIndex) * 6.2831;
+                    float radius = 0.1 + hash(starIndex + 100.0) * 0.15;
+                    
+                    position = mwPos + vec2(cos(angleOffset), sin(angleOffset)) * radius;
+                    
+                    // Add orbital motion
+                    float orbitSpeed = 0.0003 + hash(starIndex + 200.0) * 0.0004;
+                    float currentAngle = angleOffset + u_time * orbitSpeed;
+                    position = mwPos + vec2(cos(currentAngle), sin(currentAngle)) * radius;
+                    
+                    // Add wobble
+                    float wobble = sin(u_time * 2.0 + starIndex) * 0.01;
+                    position += vec2(wobble * hash(starIndex + 300.0), wobble * hash(starIndex + 400.0));
+                }
+                // Andromeda stars (indices 50-99)
+                else if (pointType < 100.0) {
+                    float starIndex = pointType - 50.0;
+                    float angleOffset = hash(starIndex + 500.0) * 6.2831;
+                    float radius = 0.1 + hash(starIndex + 600.0) * 0.15;
+                    
+                    position = andPos + vec2(cos(angleOffset), sin(angleOffset)) * radius;
+                    
+                    // Add orbital motion
+                    float orbitSpeed = 0.0003 + hash(starIndex + 700.0) * 0.0004;
+                    float currentAngle = angleOffset + u_time * orbitSpeed;
+                    position = andPos + vec2(cos(currentAngle), sin(currentAngle)) * radius;
+                    
+                    // Add wobble
+                    float wobble = sin(u_time * 2.0 + starIndex) * 0.01;
+                    position += vec2(wobble * hash(starIndex + 800.0), wobble * hash(starIndex + 900.0));
+                }
+                // Solar systems (indices 100-101)
+                else if (pointType < 102.0) {
+                    float systemIndex = pointType - 100.0;
+                    
+                    // Milky Way solar system (yellow)
+                    if (systemIndex == 0.0) {
+                        float orbitAngle = u_time * 0.0005;
+                        float orbitRadius = 0.1;
+                        position = mwPos + vec2(cos(orbitAngle), sin(orbitAngle)) * orbitRadius;
+                    }
+                    // Andromeda solar system (cyan) - hide after merger
+                    else if (systemIndex == 1.0 && u_progress <= 0.8) {
+                        float orbitAngle = u_time * 0.0005 + 3.14159;
+                        float orbitRadius = 0.1;
+                        position = andPos + vec2(cos(orbitAngle), sin(orbitAngle)) * orbitRadius;
+                    } else {
+                        // Hide Andromeda system after merger
+                        position = vec2(10.0, 10.0); // Move off-screen
+                    }
+                }
+                
+                // Convert to clip space
+                vec2 clipPos = position * vec2(u_resolution.y / u_resolution.x, 1.0) * 2.0;
+                gl_Position = vec4(clipPos, 0.0, 1.0);
+                gl_PointSize = a_pointSize;
+                
+                v_color = a_color;
+                
+                // Twinkle effect for stars
+                if (pointType < 100.0) {
+                    float twinkle = 0.7 + 0.3 * sin(u_time * 3.0 + pointType * 10.0);
+                    v_alpha = twinkle;
+                } else {
+                    v_alpha = 1.0; // Solar systems don't twinkle
+                }
+            }
+        `;
+
+        // Fragment shader for point rendering
+        const fragmentShaderSource = `
+            precision highp float;
+            
+            uniform sampler2D u_background;
+            uniform vec2 u_resolution;
+            uniform float u_progress;
+            
+            varying vec3 v_color;
+            varying float v_alpha;
+            
+            void main() {
+                // Create circular points with soft edges
+                vec2 coord = gl_PointCoord * 2.0 - 1.0;
+                float dist = length(coord);
+                
+                if (dist > 1.0) {
+                    discard;
+                }
+                
+                // Soft falloff
+                float alpha = (1.0 - dist) * v_alpha;
+                
+                // Sample background for basic blending
+                vec2 bgUV = gl_FragCoord.xy / u_resolution;
+                vec3 bg = texture2D(u_background, bgUV).rgb;
+                
+                // Blend point with background
+                vec3 finalColor = mix(bg, v_color, alpha * 0.8);
+                
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `;
+
+        // Compile shaders
+        function compileShader(source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error('Shader compile error:', gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = compileShader(vertexShaderSource, gl.VERTEX_SHADER);
+        const fragmentShader = compileShader(fragmentShaderSource, gl.FRAGMENT_SHADER);
+
+        // Create program
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Program link error:', gl.getProgramInfoLog(program));
+        }
+
+        gl.useProgram(program);
+
+        // Create star data (50 stars per galaxy + 2 solar systems = 102 points)
+        const NUM_STARS = 102;
+        const positions = new Float32Array(NUM_STARS * 2);
+        const pointSizes = new Float32Array(NUM_STARS);
+        const colors = new Float32Array(NUM_STARS * 3);
+        const twinkleParams = new Float32Array(NUM_STARS);
+
+        // Initialize star data
+        for (let i = 0; i < NUM_STARS; i++) {
+            // Temporary initial positions
+            positions[i * 2] = (Math.random() - 0.5) * 2.0;
+            positions[i * 2 + 1] = (Math.random() - 0.5) * 2.0;
+            
+            // Star type identification
+            twinkleParams[i] = i;
+            
+            // Set point sizes and colors based on type
+            if (i < 50) {
+                // Milky Way stars - white
+                pointSizes[i] = 2.0 + Math.random() * 2.0;
+                colors[i * 3] = 1.0;     // R
+                colors[i * 3 + 1] = 1.0; // G  
+                colors[i * 3 + 2] = 1.0; // B
+            } else if (i < 100) {
+                // Andromeda stars - white
+                pointSizes[i] = 2.0 + Math.random() * 2.0;
+                colors[i * 3] = 1.0;
+                colors[i * 3 + 1] = 1.0;
+                colors[i * 3 + 2] = 1.0;
+            } else if (i === 100) {
+                // Milky Way solar system - yellow
+                pointSizes[i] = 8.0;
+                colors[i * 3] = 1.0;
+                colors[i * 3 + 1] = 1.0;
+                colors[i * 3 + 2] = 0.0;
+            } else {
+                // Andromeda solar system - cyan
+                pointSizes[i] = 8.0;
+                colors[i * 3] = 0.0;
+                colors[i * 3 + 1] = 1.0;
+                colors[i * 3 + 2] = 1.0;
+            }
+        }
+
+        // Create and bind buffers
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.DYNAMIC_DRAW);
+
+        const positionLocation = gl.getAttribLocation(program, 'a_position');
+        gl.enableVertexAttribArray(positionLocation);
+        gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+        const sizeBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, sizeBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, pointSizes, gl.STATIC_DRAW);
+
+        const sizeLocation = gl.getAttribLocation(program, 'a_pointSize');
+        gl.enableVertexAttribArray(sizeLocation);
+        gl.vertexAttribPointer(sizeLocation, 1, gl.FLOAT, false, 0, 0);
+
+        const colorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+
+        const colorLocation = gl.getAttribLocation(program, 'a_color');
+        gl.enableVertexAttribArray(colorLocation);
+        gl.vertexAttribPointer(colorLocation, 3, gl.FLOAT, false, 0, 0);
+
+        const twinkleBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, twinkleBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, twinkleParams, gl.STATIC_DRAW);
+
+        const twinkleLocation = gl.getAttribLocation(program, 'a_twinkle');
+        gl.enableVertexAttribArray(twinkleLocation);
+        gl.vertexAttribPointer(twinkleLocation, 1, gl.FLOAT, false, 0, 0);
+
+        // Set uniforms
+        const timeLocation = gl.getUniformLocation(program, 'u_time');
+        const progressLocation = gl.getUniformLocation(program, 'u_progress');
+        const resolutionLocation = gl.getUniformLocation(program, 'u_resolution');
+        
+        gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+
+        // Create texture for background
+        const backgroundTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, backgroundTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE, 
+                     new Uint8Array([20, 20, 40]));
+        
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+        // Load background image
+        const backgroundImage = new Image();
+        backgroundImage.crossOrigin = "anonymous";
+        backgroundImage.onload = function() {
+            gl.bindTexture(gl.TEXTURE_2D, backgroundTexture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, backgroundImage);
+        };
+        backgroundImage.src = 'https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_4k_print.jpg';
+
+        const backgroundLocation = gl.getUniformLocation(program, 'u_background');
+        gl.uniform1i(backgroundLocation, 0);
+
+        // Enable blending and point smoothing
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.enable(gl.POINT_SMOOTH);
+
+        // Animation loop
+        let startTime = performance.now();
+        let progress = 0;
+        const LOOP_DURATION = 300;
+
+        function animate(currentTime) {
+            const elapsed = (currentTime - startTime) / 1000;
+            progress = (elapsed % LOOP_DURATION) / LOOP_DURATION;
+            
+            progressSlider.value = progress * 1000;
+            
+            gl.uniform1f(timeLocation, elapsed);
+            gl.uniform1f(progressLocation, progress);
+            
+            // Clear with dark blue
+            gl.clearColor(0.05, 0.05, 0.1, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            
+            // Draw points
+            gl.drawArrays(gl.POINTS, 0, NUM_STARS);
+            
+            requestAnimationFrame(animate);
+        }
+
+        // Handle slider input
+        progressSlider.addEventListener('input', function() {
+            progress = this.value / 1000;
+            startTime = performance.now() - (progress * LOOP_DURATION * 1000);
+        });
+
+        // Start animation
+        requestAnimationFrame(animate);
+
+        // Handle resize
+        window.addEventListener('resize', function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.uniform2f(resolutionLocation, canvas.width, canvas.height);
+        });
+    </script>
+</body>
+</html>
