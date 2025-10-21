@@ -3,14 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sagittarius A* - Supermassive Black Hole Simulation</title>
+    <title>Sagittarius A* - Enhanced Black Hole Simulation</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
             background-color: #000;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
         }
         
         #canvas-container {
@@ -19,6 +26,7 @@
             left: 0;
             width: 100%;
             height: 100%;
+            z-index: 1;
         }
         
         #license-notice {
@@ -46,6 +54,7 @@
             max-width: 300px;
             font-size: 14px;
             line-height: 1.5;
+            z-index: 10;
         }
         
         h1 {
@@ -56,6 +65,67 @@
         
         .accent {
             color: #ff9800;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 10;
+            width: 260px;
+        }
+        
+        .control-group {
+            margin-bottom: 12px;
+        }
+        
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #ccc;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        
+        .value-display {
+            font-size: 11px;
+            color: #aaa;
+            text-align: right;
+        }
+        
+        button {
+            background-color: #333;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #555;
+        }
+        
+        .reset-btn {
+            background-color: #d32f2f;
+        }
+        
+        .reset-btn:hover {
+            background-color: #f44336;
         }
     </style>
 </head>
@@ -70,24 +140,62 @@
         Source: https://github.com/squalor-xyz/space/blob/main/sagittarius-a.html.
     </div>
     
+    <div id="controls">
+        <h3>Simulation Controls</h3>
+        
+        <div class="control-group">
+            <label for="disk-brightness">Accretion Disk Brightness</label>
+            <input type="range" id="disk-brightness" min="0.5" max="2.0" step="0.1" value="1.0">
+            <div class="value-display" id="disk-brightness-value">1.0</div>
+        </div>
+        
+        <div class="control-group">
+            <label for="rotation-speed">Rotation Speed</label>
+            <input type="range" id="rotation-speed" min="0.1" max="2.0" step="0.1" value="1.0">
+            <div class="value-display" id="rotation-speed-value">1.0</div>
+        </div>
+        
+        <div class="control-group">
+            <label for="doppler-effect">Doppler Effect Intensity</label>
+            <input type="range" id="doppler-effect" min="0.0" max="1.5" step="0.1" value="1.0">
+            <div class="value-display" id="doppler-effect-value">1.0</div>
+        </div>
+        
+        <div class="control-group">
+            <label for="jet-intensity">Jet Intensity</label>
+            <input type="range" id="jet-intensity" min="0.0" max="1.5" step="0.1" value="1.0">
+            <div class="value-display" id="jet-intensity-value">1.0</div>
+        </div>
+        
+        <div class="control-group">
+            <label for="lens-flare">Lens Flare Intensity</label>
+            <input type="range" id="lens-flare" min="0.0" max="1.5" step="0.1" value="1.0">
+            <div class="value-display" id="lens-flare-value">1.0</div>
+        </div>
+        
+        <div class="control-group">
+            <button id="reset-btn" class="reset-btn">Reset to Default</button>
+        </div>
+    </div>
+    
     <div id="info-panel">
         <h1>Sagittarius A*</h1>
         <p>Supermassive black hole at the center of our Milky Way galaxy.</p>
         <p>Mass: <span class="accent">4.3 million</span> solar masses</p>
         <p>Distance: <span class="accent">26,000</span> light years</p>
-        <p>Observe the photon ring and gravitational lensing effects.</p>
+        <p>Now featuring Doppler boosting, particle jets, and multiple photon rings.</p>
     </div>
 
     <script>
-        // Main WebGL simulation
+        // Enhanced WebGL simulation with all requested features
         (function() {
             // Canvas setup
             const canvas = document.getElementById('blackhole-canvas');
             const container = document.getElementById('canvas-container');
             
             function resizeCanvas() {
-                canvas.width = container.clientWidth;
-                canvas.height = container.clientHeight;
+                canvas.width = container.clientWidth * window.devicePixelRatio;
+                canvas.height = container.clientHeight * window.devicePixelRatio;
             }
             
             window.addEventListener('resize', resizeCanvas);
@@ -105,7 +213,37 @@
                 return;
             }
             
-            // Vertex shader source
+            // Control elements
+            const diskBrightnessSlider = document.getElementById('disk-brightness');
+            const rotationSpeedSlider = document.getElementById('rotation-speed');
+            const dopplerEffectSlider = document.getElementById('doppler-effect');
+            const jetIntensitySlider = document.getElementById('jet-intensity');
+            const lensFlareSlider = document.getElementById('lens-flare');
+            const resetButton = document.getElementById('reset-btn');
+            
+            // Update value displays
+            function updateValueDisplays() {
+                document.getElementById('disk-brightness-value').textContent = diskBrightnessSlider.value;
+                document.getElementById('rotation-speed-value').textContent = rotationSpeedSlider.value;
+                document.getElementById('doppler-effect-value').textContent = dopplerEffectSlider.value;
+                document.getElementById('jet-intensity-value').textContent = jetIntensitySlider.value;
+                document.getElementById('lens-flare-value').textContent = lensFlareSlider.value;
+            }
+            
+            // Reset to defaults
+            resetButton.addEventListener('click', function() {
+                diskBrightnessSlider.value = 1.0;
+                rotationSpeedSlider.value = 1.0;
+                dopplerEffectSlider.value = 1.0;
+                jetIntensitySlider.value = 1.0;
+                lensFlareSlider.value = 1.0;
+                updateValueDisplays();
+            });
+            
+            // Initial update
+            updateValueDisplays();
+            
+            // Enhanced vertex shader source
             const vertexShaderSource = `
                 attribute vec2 a_position;
                 varying vec2 v_texCoord;
@@ -116,13 +254,22 @@
                 }
             `;
             
-            // Fragment shader source - This creates the black hole with gravitational lensing
+            // Enhanced fragment shader with all new features
             const fragmentShaderSource = `
                 precision highp float;
                 
                 varying vec2 v_texCoord;
                 uniform float u_time;
                 uniform vec2 u_resolution;
+                uniform float u_disk_brightness;
+                uniform float u_rotation_speed;
+                uniform float u_doppler_effect;
+                uniform float u_jet_intensity;
+                uniform float u_lens_flare;
+                
+                // Constants
+                #define PI 3.14159265359
+                #define SPEED_OF_LIGHT 1.0
                 
                 // Noise function for realistic texture
                 float hash(vec2 p) {
@@ -155,6 +302,82 @@
                     }
                     
                     return value;
+                }
+                
+                // Function to create lens flare effects
+                vec3 addLensFlare(vec2 uv, vec3 color, float intensity) {
+                    vec2 center = vec2(0.5, 0.5);
+                    vec2 flareVec = uv - center;
+                    float dist = length(flareVec);
+                    
+                    // Main flare
+                    float mainFlare = 0.05 / dist;
+                    mainFlare = pow(mainFlare, 1.5);
+                    color += vec3(1.0, 0.9, 0.7) * mainFlare * intensity * 0.3;
+                    
+                    // Halo
+                    float halo = 0.02 / (dist * 2.0);
+                    halo = pow(halo, 0.8);
+                    color += vec3(0.7, 0.8, 1.0) * halo * intensity * 0.2;
+                    
+                    // Chromatic aberration effect
+                    vec2 caOffset = flareVec * 0.005;
+                    color.r += 0.02 / (length(uv - center + caOffset) * 2.0) * intensity;
+                    color.b += 0.02 / (length(uv - center - caOffset) * 2.0) * intensity;
+                    
+                    return color;
+                }
+                
+                // Function to create particle jets
+                vec3 addJets(vec2 uv, vec3 color, float intensity, float time) {
+                    // Jet parameters
+                    float jetWidth = 0.02;
+                    float jetLength = 0.5;
+                    float baseIntensity = 0.5;
+                    
+                    // Top jet
+                    if (abs(uv.x - 0.5) < jetWidth && uv.y > 0.5) {
+                        float jetPos = (uv.y - 0.5) / jetLength;
+                        if (jetPos < 1.0) {
+                            // Pulsing effect
+                            float pulse = sin(time * 2.0 + jetPos * 10.0) * 0.2 + 0.8;
+                            
+                            // Jet color (blue-white)
+                            vec3 jetColor = mix(vec3(0.3, 0.5, 1.0), vec3(0.8, 0.9, 1.0), jetPos);
+                            
+                            // Turbulence
+                            float turbulence = fbm(vec2(uv.x * 50.0, time * 5.0 + jetPos * 20.0)) * 0.3;
+                            
+                            // Intensity falloff
+                            float falloff = 1.0 - jetPos;
+                            falloff = pow(falloff, 0.5);
+                            
+                            color += jetColor * baseIntensity * falloff * pulse * (1.0 + turbulence) * intensity;
+                        }
+                    }
+                    
+                    // Bottom jet
+                    if (abs(uv.x - 0.5) < jetWidth && uv.y < 0.5) {
+                        float jetPos = (0.5 - uv.y) / jetLength;
+                        if (jetPos < 1.0) {
+                            // Pulsing effect
+                            float pulse = sin(time * 2.0 + jetPos * 10.0) * 0.2 + 0.8;
+                            
+                            // Jet color (blue-white)
+                            vec3 jetColor = mix(vec3(0.3, 0.5, 1.0), vec3(0.8, 0.9, 1.0), jetPos);
+                            
+                            // Turbulence
+                            float turbulence = fbm(vec2(uv.x * 50.0, time * 5.0 + jetPos * 20.0)) * 0.3;
+                            
+                            // Intensity falloff
+                            float falloff = 1.0 - jetPos;
+                            falloff = pow(falloff, 0.5);
+                            
+                            color += jetColor * baseIntensity * falloff * pulse * (1.0 + turbulence) * intensity;
+                        }
+                    }
+                    
+                    return color;
                 }
                 
                 void main() {
@@ -191,14 +414,16 @@
                     // Distance to black hole in distorted space
                     float distortedDist = length(distortedUV - blackHolePos);
                     
+                    vec3 finalColor = vec3(0.0);
+                    
                     // Check if we're in the accretion disk region
                     if (distortedDist > innerDiskRadius && distortedDist < outerDiskRadius) {
                         // Disk coordinates
                         float angle = atan(distortedUV.y - blackHolePos.y, distortedUV.x - blackHolePos.x);
                         float radius = distortedDist;
                         
-                        // Swirling effect with time
-                        float swirl = u_time * 0.5;
+                        // Swirling effect with time and rotation speed control
+                        float swirl = u_time * 0.5 * u_rotation_speed;
                         angle += swirl * (1.0 / (radius * radius + 0.1));
                         
                         // Convert back to cartesian
@@ -221,25 +446,47 @@
                             diskColor = mix(vec3(0.8, 0.2, 0.1), vec3(1.0, 0.6, 0.2), temperature * 2.0);
                         }
                         
+                        // Doppler boosting effect
+                        // Material moving toward us (bottom of disk) appears brighter
+                        // Material moving away (top of disk) appears dimmer
+                        float dopplerFactor = 1.0;
+                        if (u_doppler_effect > 0.0) {
+                            // Simplified Doppler effect based on vertical position in disk
+                            float verticalPos = (distortedUV.y - blackHolePos.y) / radius;
+                            dopplerFactor = 1.0 + verticalPos * 0.5 * u_doppler_effect;
+                            dopplerFactor = clamp(dopplerFactor, 0.5, 1.5);
+                        }
+                        
                         // Add turbulence to color
                         diskColor += turbulence * 0.3;
                         
                         // Brightness falloff
                         float brightness = 1.0 - pow((radius - innerDiskRadius) / (outerDiskRadius - innerDiskRadius), 0.5);
-                        diskColor *= brightness;
+                        diskColor *= brightness * u_disk_brightness * dopplerFactor;
                         
-                        gl_FragColor = vec4(diskColor, 1.0);
+                        finalColor = diskColor;
                     } 
-                    // Photon ring region
+                    // Multiple photon rings region
                     else if (distortedDist > blackHoleRadius * 0.9 && distortedDist < innerDiskRadius * 1.1) {
-                        // Multiple photon rings due to light orbiting the black hole
-                        float ring = sin(distortedDist * 80.0 - u_time * 10.0) * 0.5 + 0.5;
-                        ring = pow(ring, 4.0);
+                        // Primary photon ring (innermost)
+                        float ring1 = sin(distortedDist * 80.0 - u_time * 10.0) * 0.5 + 0.5;
+                        ring1 = pow(ring1, 4.0);
                         
-                        // Color for photon ring (bright white with blue tint)
+                        // Secondary photon ring
+                        float ring2 = sin(distortedDist * 120.0 - u_time * 15.0 + 1.0) * 0.5 + 0.5;
+                        ring2 = pow(ring2, 6.0) * 0.7;
+                        
+                        // Tertiary photon ring (outermost)
+                        float ring3 = sin(distortedDist * 160.0 - u_time * 20.0 + 2.0) * 0.5 + 0.5;
+                        ring3 = pow(ring3, 8.0) * 0.4;
+                        
+                        // Combine rings
+                        float ring = ring1 + ring2 + ring3;
+                        
+                        // Color for photon rings (bright white with blue tint)
                         vec3 ringColor = vec3(0.8, 0.9, 1.0) * ring * 2.0;
                         
-                        gl_FragColor = vec4(ringColor, 1.0);
+                        finalColor = ringColor;
                     }
                     // Background stars
                     else {
@@ -250,11 +497,17 @@
                         // Only show bright stars
                         if (starValue > 0.98) {
                             float brightness = pow(starValue, 8.0);
-                            gl_FragColor = vec4(vec3(1.0, 1.0, 1.0) * brightness, 1.0);
-                        } else {
-                            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                            finalColor = vec3(1.0, 1.0, 1.0) * brightness;
                         }
                     }
+                    
+                    // Add particle jets
+                    finalColor = addJets(uv, finalColor, u_jet_intensity, u_time);
+                    
+                    // Add lens flare effects
+                    finalColor = addLensFlare(v_texCoord, finalColor, u_lens_flare);
+                    
+                    gl_FragColor = vec4(finalColor, 1.0);
                 }
             `;
             
@@ -306,9 +559,45 @@
             // Get uniform locations
             const timeUniformLocation = gl.getUniformLocation(program, "u_time");
             const resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
+            const diskBrightnessLocation = gl.getUniformLocation(program, "u_disk_brightness");
+            const rotationSpeedLocation = gl.getUniformLocation(program, "u_rotation_speed");
+            const dopplerEffectLocation = gl.getUniformLocation(program, "u_doppler_effect");
+            const jetIntensityLocation = gl.getUniformLocation(program, "u_jet_intensity");
+            const lensFlareLocation = gl.getUniformLocation(program, "u_lens_flare");
             
-            // Set resolution uniform
+            // Set initial uniform values
             gl.uniform2f(resolutionUniformLocation, canvas.width, canvas.height);
+            gl.uniform1f(diskBrightnessLocation, parseFloat(diskBrightnessSlider.value));
+            gl.uniform1f(rotationSpeedLocation, parseFloat(rotationSpeedSlider.value));
+            gl.uniform1f(dopplerEffectLocation, parseFloat(dopplerEffectSlider.value));
+            gl.uniform1f(jetIntensityLocation, parseFloat(jetIntensitySlider.value));
+            gl.uniform1f(lensFlareLocation, parseFloat(lensFlareSlider.value));
+            
+            // Update uniforms when sliders change
+            diskBrightnessSlider.addEventListener('input', function() {
+                gl.uniform1f(diskBrightnessLocation, parseFloat(this.value));
+                updateValueDisplays();
+            });
+            
+            rotationSpeedSlider.addEventListener('input', function() {
+                gl.uniform1f(rotationSpeedLocation, parseFloat(this.value));
+                updateValueDisplays();
+            });
+            
+            dopplerEffectSlider.addEventListener('input', function() {
+                gl.uniform1f(dopplerEffectLocation, parseFloat(this.value));
+                updateValueDisplays();
+            });
+            
+            jetIntensitySlider.addEventListener('input', function() {
+                gl.uniform1f(jetIntensityLocation, parseFloat(this.value));
+                updateValueDisplays();
+            });
+            
+            lensFlareSlider.addEventListener('input', function() {
+                gl.uniform1f(lensFlareLocation, parseFloat(this.value));
+                updateValueDisplays();
+            });
             
             // Render loop
             let startTime = Date.now();
@@ -319,7 +608,8 @@
                 gl.uniform1f(timeUniformLocation, currentTime);
                 
                 // Update resolution if canvas size changed
-                if (canvas.width !== container.clientWidth || canvas.height !== container.clientHeight) {
+                if (canvas.width !== container.clientWidth * window.devicePixelRatio || 
+                    canvas.height !== container.clientHeight * window.devicePixelRatio) {
                     resizeCanvas();
                     gl.uniform2f(resolutionUniformLocation, canvas.width, canvas.height);
                 }
