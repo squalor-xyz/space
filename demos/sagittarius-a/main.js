@@ -73,6 +73,7 @@ try {
     "u_ring_intensity",
     "u_jet_intensity",
     "u_inclination",
+    "u_quality",
   ]) {
     uniforms[name] = gl.getUniformLocation(program, name);
   }
@@ -125,6 +126,13 @@ document.getElementById("reset")?.addEventListener("click", () => {
   state.quality = defaults.quality;
 });
 
+/** @param {"low"|"medium"|"high"} level */
+function qualityLevel(level) {
+  if (level === "low") return 0;
+  if (level === "high") return 2;
+  return 1;
+}
+
 const start = performance.now();
 
 const loop = createVisibilityLoop((now) => {
@@ -146,6 +154,7 @@ const loop = createVisibilityLoop((now) => {
   gl.uniform1f(uniforms.u_ring_intensity, state.ring);
   gl.uniform1f(uniforms.u_jet_intensity, state.jet);
   gl.uniform1f(uniforms.u_inclination, state.inclination);
+  gl.uniform1f(uniforms.u_quality, qualityLevel(state.quality));
 
   gl.clearColor(0, 0, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
