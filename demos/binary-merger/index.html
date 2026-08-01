@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Artistic binary black-hole merger visualization by Squalor LLC." />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Binary Merger — Squalor LLC</title>
+  <link rel="stylesheet" href="../../css/site.css" />
+</head>
+<body class="demo-body has-scrubber">
+  <canvas id="c" aria-label="Binary black hole merger visualization"></canvas>
+
+  <div id="error-banner" class="error-banner" role="alert"></div>
+
+  <div class="panel panel-notice" id="notice"></div>
+
+  <div class="demo-toolbar" role="toolbar" aria-label="Demo tools">
+    <button type="button" class="btn" id="btn-controls" aria-expanded="true" aria-controls="controls-panel">Controls</button>
+    <button type="button" class="btn" id="btn-about" aria-expanded="true" aria-controls="info-panel">About</button>
+    <a class="btn" href="../../index.html">Home</a>
+  </div>
+
+  <div class="panel panel-controls" id="controls-panel" role="dialog" aria-label="Simulation controls">
+    <div class="panel-header">
+      <h3>Controls</h3>
+      <button type="button" class="btn btn-icon" id="btn-close-controls" aria-label="Close controls">×</button>
+    </div>
+    <div class="control-group">
+      <label for="brightness">Disk brightness</label>
+      <div class="row">
+        <input type="range" id="brightness" min="0.3" max="2.0" step="0.05" value="1.0" />
+        <span class="value" id="brightness-v">1.0</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label for="ring">Photon rings</label>
+      <div class="row">
+        <input type="range" id="ring" min="0.2" max="2.0" step="0.05" value="1.0" />
+        <span class="value" id="ring-v">1.0</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label for="quality">Quality</label>
+      <select id="quality">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+    </div>
+    <div class="control-group btn-row">
+      <button type="button" class="btn" id="play">Pause</button>
+      <button type="button" class="btn" id="reset">Reset</button>
+    </div>
+  </div>
+
+  <div class="panel panel-info" id="info-panel" role="dialog" aria-label="About this visualization">
+    <div class="panel-header">
+      <h1>Binary merger</h1>
+      <button type="button" class="btn btn-icon" id="btn-close-about" aria-label="Close about">×</button>
+    </div>
+    <p>Illustrative spiral-in of two supermassive black holes (Milky Way– and Andromeda-scale mass ratio).</p>
+    <p><strong>Compressed time &amp; scale:</strong> real galactic mergers take ~billions of years; separation here is not to scale. This is a real-time artistic visualization, not numerical relativity.</p>
+    <p>Works in desktop and mobile browsers with WebGL.</p>
+  </div>
+
+  <div class="scrubber-bar">
+    <button type="button" class="btn" id="play-bar" aria-label="Play or pause">Pause</button>
+    <input type="range" id="scrubber" min="0" max="1" step="0.001" value="0" aria-label="Merger progress" />
+    <span class="label" id="progress-label">0%</span>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
