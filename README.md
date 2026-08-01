@@ -2,7 +2,11 @@
 
 Real-time black hole visualizations in the browser.
 
+**Live:** [https://space.squalor.xyz](https://space.squalor.xyz)
+
 **Squalor LLC** · Free and open source under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/).
+
+This site is hosted **on its own** GitHub Pages custom domain. It is not nested under [squalor.xyz](https://squalor.xyz) (the LLC marketing site).
 
 ## Demos
 
@@ -39,9 +43,19 @@ Open `http://localhost:8080/` on a computer or phone on the same network (`http:
 
 No `npm install`. No build step. No runtime dependencies.
 
-## GitHub Pages
+## GitHub Pages (`space.squalor.xyz`)
 
-Enable Pages for this repository (deploy from the root of `main`, or copy the tree into `/docs` if you prefer). Relative paths are used throughout so project sites and custom domains both work.
+1. **Repo settings → Pages**
+   - Source: Deploy from branch **`main`**, folder **`/ (root)`**
+   - Custom domain: **`space.squalor.xyz`** (this repo’s root `CNAME` file)
+   - After DNS verifies: enable **Enforce HTTPS**
+2. **DNS** (on the `squalor.xyz` zone):
+
+   | Type | Name | Target |
+   |------|------|--------|
+   | CNAME | `space` | `squalor-xyz.github.io` |
+
+Relative paths are used throughout so project sites and custom domains both work. Keep the root `.nojekyll` file so GitHub’s Jekyll step does not interfere with static assets.
 
 ## Stack
 
