@@ -6,7 +6,7 @@ Real-time black hole visualizations in the browser.
 
 **Squalor LLC** · Free and open source under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/).
 
-This site is hosted **on its own** GitHub Pages custom domain. It is not nested under [squalor.xyz](https://squalor.xyz) (the LLC marketing site).
+This site is hosted **on its own** GitHub Pages custom domain. It is not nested under [squalor.xyz](https://squalor.xyz) (the LLC marketing site). Visual chrome (palette, type, RF logo) matches the main site brand system; demos stay self-contained static pages.
 
 ## Demos
 

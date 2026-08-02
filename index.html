@@ -5,65 +5,112 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="description" content="Real-time black hole visualizations by Squalor LLC. Free and open source (MPL-2.0). Works on desktop and mobile browsers." />
   <meta name="author" content="Squalor LLC" />
-  <meta name="theme-color" content="#05060a" />
+  <meta name="theme-color" content="#0f1419" />
   <title>Space — Black Hole Visualizations · Squalor LLC</title>
+  <link rel="canonical" href="https://space.squalor.xyz/" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="favicon-180.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Squalor LLC" />
+  <meta property="og:title" content="Space — Black Hole Visualizations · Squalor LLC" />
+  <meta property="og:description" content="Real-time black hole visualizations by Squalor LLC. Free and open source (MPL-2.0)." />
+  <meta property="og:url" content="https://space.squalor.xyz/" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Space — Black Hole Visualizations · Squalor LLC" />
+  <meta name="twitter:description" content="Real-time black hole visualizations by Squalor LLC. Free and open source (MPL-2.0)." />
   <link rel="stylesheet" href="./css/site.css" />
 </head>
 <body>
-  <div class="hub">
-    <header class="hub-hero">
-      <h1>Space</h1>
-      <p class="tagline">
-        Real-time WebGL visualizations of black holes — built for the browser,
-        honest about what they approximate, and free to use and improve.
-      </p>
-      <div class="hub-meta">
-        <span>Squalor LLC</span>
-        <span>·</span>
-        <a href="https://squalor.xyz">squalor.xyz</a>
-        <span>·</span>
-        <a href="https://www.mozilla.org/MPL/2.0/" target="_blank" rel="noopener">MPL-2.0</a>
-        <span>·</span>
-        <a href="https://github.com/squalor-xyz/space" target="_blank" rel="noopener">GitHub</a>
+  <div class="site-shell">
+    <header class="site-header">
+      <div class="nav-bar">
+        <div class="brand-lockup">
+          <a class="brand-link" href="./">
+            <img class="logo-mark" src="logo.svg" alt="Squalor LLC logo" />
+            <div class="brand-text">
+              <p class="brand-name">Squalor LLC</p>
+              <p>Space experiments</p>
+            </div>
+          </a>
+        </div>
+        <nav class="nav-links" aria-label="Primary">
+          <a class="active" href="./">Home</a>
+          <a href="https://github.com/squalor-xyz/space" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://squalor.xyz">Main site</a>
+        </nav>
       </div>
     </header>
 
-    <section class="hub-cards" aria-label="Visualizations">
-      <article class="card">
-        <h2>Sagittarius A*</h2>
-        <p>
-          Flagship view of the Milky Way’s central black hole: thin disk,
-          approximate lensing, photon-ring glow, and interactive controls.
-        </p>
-        <a class="cta" href="./demos/sagittarius-a/">Open visualization</a>
-      </article>
-      <article class="card">
-        <h2>Binary merger</h2>
-        <p>
-          Two supermassive black holes spiral in and coalesce. Time and distance
-          are compressed for illustration — scrub the timeline yourself.
-        </p>
-        <a class="cta" href="./demos/binary-merger/">Open visualization</a>
-      </article>
-    </section>
+    <main>
+      <section class="hero">
+        <div class="container">
+          <div class="hero-copy">
+            <div class="eyebrow">Experiments · WebGL</div>
+            <h1>Space</h1>
+            <p class="tagline">
+              Real-time WebGL visualizations of black holes — built for the browser,
+              honest about what they approximate, and free to use and improve.
+            </p>
+            <div class="hub-meta">
+              <span>Squalor LLC</span>
+              <span>·</span>
+              <a href="https://squalor.xyz">squalor.xyz</a>
+              <span>·</span>
+              <a href="https://www.mozilla.org/MPL/2.0/" target="_blank" rel="noopener">MPL-2.0</a>
+              <span>·</span>
+              <a href="https://github.com/squalor-xyz/space" target="_blank" rel="noopener">GitHub</a>
+            </div>
+          </div>
+        </div>
+      </section>
 
-    <p class="hub-note">
-      <strong>About accuracy:</strong>
-      These are real-time artistic visualizations using WebGL fragment shaders.
-      They are not numerical-relativity simulations or Event Horizon Telescope
-      reconstructions. Labels on each page explain what is being approximated.
-      No accounts, no tracking, no external image CDNs required.
-    </p>
+      <section class="section">
+        <div class="container hub-cards" aria-label="Visualizations">
+          <article class="card">
+            <h2>Sagittarius A*</h2>
+            <p>
+              Flagship view of the Milky Way’s central black hole: thin disk,
+              approximate lensing, photon-ring glow, and interactive controls.
+            </p>
+            <a class="cta" href="./demos/sagittarius-a/">Open visualization</a>
+          </article>
+          <article class="card">
+            <h2>Binary merger</h2>
+            <p>
+              Two supermassive black holes spiral in and coalesce. Time and distance
+              are compressed for illustration — scrub the timeline yourself.
+            </p>
+            <a class="cta" href="./demos/binary-merger/">Open visualization</a>
+          </article>
+        </div>
+      </section>
 
-    <footer class="hub-footer">
-      <div>© Squalor LLC · <a href="https://squalor.xyz">Main site</a></div>
-      <div>
-        Licensed under the
-        <a href="https://www.mozilla.org/MPL/2.0/" target="_blank" rel="noopener">Mozilla Public License 2.0</a>.
-        Source code on
-        <a href="https://github.com/squalor-xyz/space" target="_blank" rel="noopener">GitHub</a>.
+      <section class="section">
+        <div class="container">
+          <div class="hub-note">
+            <strong>About accuracy:</strong>
+            These are real-time artistic visualizations using WebGL fragment shaders.
+            They are not numerical-relativity simulations or Event Horizon Telescope
+            reconstructions. Labels on each page explain what is being approximated.
+            No accounts, no tracking, no external image CDNs required.
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-bar">
+        <div class="footer-copy">
+          <strong>Squalor LLC</strong><br />
+          space.squalor.xyz · Desktop and mobile · Zero runtime dependencies
+        </div>
+        <div class="footer-links">
+          <a href="https://squalor.xyz">Main site</a>
+          <a href="https://github.com/squalor-xyz/space" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://www.mozilla.org/MPL/2.0/" target="_blank" rel="noopener">MPL-2.0</a>
+        </div>
       </div>
-      <div>Hosted at <a href="https://space.squalor.xyz">space.squalor.xyz</a>. Desktop and mobile browsers. Zero runtime dependencies.</div>
     </footer>
   </div>
 </body>

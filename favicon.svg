@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Squalor RF simple mark">
+  <title>Squalor RF mark (simple)</title>
+  <desc>Simplified RF badge for small sizes — waveform + ring, no wordmark.</desc>
+  <circle cx="100" cy="100" r="86" fill="none" stroke="#c9a962" stroke-width="4"/>
+  <circle cx="100" cy="100" r="74" fill="none" stroke="#6ee7d2" stroke-width="2.5"/>
+  <g fill="none" stroke="#6ee7d2" stroke-width="2.5" stroke-linecap="round" opacity="0.85">
+    <path d="M 55,100 A 45,45 0 0 1 100,55"/>
+    <path d="M 62,100 A 38,38 0 0 1 100,62"/>
+    <path d="M 70,100 A 30,30 0 0 1 100,70"/>
+  </g>
+  <path d="M 36,118 L 64,88 L 82,106 L 100,70 L 118,92 L 140,78 L 164,58"
+        fill="none" stroke="#c9a962" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
