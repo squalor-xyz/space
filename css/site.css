@@ -88,6 +88,11 @@ a.btn:focus-visible {
   outline-offset: 3px;
 }
 
+img {
+  max-width: 100%;
+  display: block;
+}
+
 /* ---- Shared chrome (hub) ---- */
 
 .site-shell {
@@ -145,8 +150,11 @@ a.btn:focus-visible {
 }
 
 .logo-mark {
-  width: 48px;
-  height: 48px;
+  width: 60px;
+  height: 60px;
+  max-width: 60px;
+  max-height: 60px;
+  aspect-ratio: 1;
   padding: 0;
   border-radius: 50%;
   background: transparent;
@@ -190,6 +198,10 @@ a.btn:focus-visible {
   border-radius: 999px;
   color: var(--text);
   font-size: 0.96rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .nav-links a:hover,

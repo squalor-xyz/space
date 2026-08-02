@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Squalor RF simple mark">
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200" role="img" aria-label="Squalor RF simple mark">
   <title>Squalor RF mark (simple)</title>
   <desc>Simplified RF badge for small sizes — waveform + ring, no wordmark.</desc>
   <circle cx="100" cy="100" r="86" fill="none" stroke="#c9a962" stroke-width="4"/>
